@@ -86,8 +86,11 @@ def create_app() -> Flask:
     limiter = _RateLimiter()
 
     def client_ip() -> str:
-        # Behind the Cloudflare tunnel the real client is in CF-Connecting-IP.
-        return request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
+        # Behind the Cloudflare tunnel (running locally), the real client is in CF-Connecting-IP.
+        # Only trust the header if the connection is from the trusted local tunnel.
+        if request.remote_addr in _LOCAL_IPS:
+            return request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
+        return request.remote_addr or ""
 
     @app.get("/")
     def index():
