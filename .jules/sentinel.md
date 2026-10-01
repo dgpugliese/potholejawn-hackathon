@@ -1,0 +1,4 @@
+## 2026-09-20 - [Rate Limit Bypass via Spoofed Headers]
+**Vulnerability:** Attackers could bypass per-IP or global rate limits by sending spoofed `CF-Connecting-IP` headers (e.g. `127.0.0.1` to bypass all limits, or random IPs to bypass per-IP limits). The application trusted this header blindly without verifying the origin of the connection.
+**Learning:** Never trust client-provided proxy HTTP headers (`CF-Connecting-IP`, `X-Forwarded-For`) for security-critical decisions without validating that the actual network connection (`request.remote_addr`) comes from a trusted reverse proxy (e.g. localhost for cloudflared tunnel).
+**Prevention:** Ensure that proxy headers are only evaluated if the `request.remote_addr` is explicitly known to be a trusted proxy IP. Otherwise, always fall back to `request.remote_addr`.
