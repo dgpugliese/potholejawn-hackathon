@@ -323,6 +323,17 @@ def create_app() -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdnjs.cloudflare.com; "
+            "style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
+            "img-src 'self' data: https://*.tile.openstreetmap.org https://server.arcgisonline.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "connect-src 'self' https://photon.komoot.io; "
+            "object-src 'none'; "
+            "base-uri 'self';"
+        )
         return response
 
     return app

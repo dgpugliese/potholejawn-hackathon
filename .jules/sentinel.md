@@ -1,0 +1,4 @@
+## 2025-02-27 - [Add CSP and HSTS Security Headers]
+**Vulnerability:** The application lacked `Content-Security-Policy` and `Strict-Transport-Security` (HSTS) headers, making it more vulnerable to Cross-Site Scripting (XSS) and code injection, and lacking an enforced HTTPS constraint for browsers.
+**Learning:** Adding defense-in-depth security headers like CSP is crucial for a web application to limit the resources the browser is allowed to load. A custom CSP needed to be built targeting map resources for this specific application (e.g. Leaflet map tiles from OpenStreetMap and ArcGIS, and search resources from Komoot).
+**Prevention:** In new web projects, always include a robust set of security headers including CSP and HSTS from the beginning, tailoring the CSP to the required external sources.
