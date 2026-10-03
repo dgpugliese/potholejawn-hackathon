@@ -12,7 +12,7 @@ def _client(monkeypatch):
 def test_per_ip_limit_trips(monkeypatch):
     monkeypatch.setattr(webapp, "RATE_MAX_PER_IP", 2)
     client = _client(monkeypatch)
-    headers = {"CF-Connecting-IP": "203.0.113.9"}
+    headers = {"X-Forwarded-For": "203.0.113.9"}
     for _ in range(2):
         assert client.get("/api/trip/stream?start=A&end=B", headers=headers).status_code == 200
     limited = client.get("/api/trip/stream?start=A&end=B", headers=headers)
@@ -26,8 +26,8 @@ def test_per_ip_limit_trips(monkeypatch):
 def test_global_hourly_limit_trips_across_ips(monkeypatch):
     monkeypatch.setattr(webapp, "RATE_MAX_PER_HOUR", 1)
     client = _client(monkeypatch)
-    first = {"CF-Connecting-IP": "203.0.113.1"}
-    second = {"CF-Connecting-IP": "198.51.100.2"}
+    first = {"X-Forwarded-For": "203.0.113.1"}
+    second = {"X-Forwarded-For": "198.51.100.2"}
     assert client.get("/api/trip/stream?start=A&end=B", headers=first).status_code == 200
     limited = client.get("/api/trip/stream?start=A&end=B", headers=second)
     assert limited.status_code == 429
