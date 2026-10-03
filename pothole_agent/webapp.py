@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .agent import investigate
 from .routing import MAX_ADDRESS_CHARS, RoutingError, potholes_in_bbox
@@ -83,11 +84,14 @@ def _analyst_client():
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # requests are two short strings
+    # Trust 1 layer of proxies (e.g. Cloudflare) to securely set X-Forwarded-For
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     limiter = _RateLimiter()
 
     def client_ip() -> str:
-        # Behind the Cloudflare tunnel the real client is in CF-Connecting-IP.
-        return request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
+        # Behind the proxy (handled securely by ProxyFix) the real client is in remote_addr.
+        return request.remote_addr or ""
+
 
     @app.get("/")
     def index():
