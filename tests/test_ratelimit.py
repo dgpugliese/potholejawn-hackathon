@@ -42,3 +42,16 @@ def test_localhost_is_exempt(monkeypatch):
     for _ in range(3):
         assert client.get("/api/trip/stream?start=A&end=B").status_code == 200
     assert client.post("/api/trip", json={"start": "A", "end": "B"}).status_code == 200
+
+
+def test_spoofed_local_ip(monkeypatch):
+    monkeypatch.setattr(webapp, "RATE_MAX_PER_IP", 1)
+    client = _client(monkeypatch)
+    # Simulate a public IP trying to spoof a local IP
+    headers = {"CF-Connecting-IP": "127.0.0.1"}
+
+    # Send requests spoofing CF-Connecting-IP
+    assert client.get("/api/trip/stream?start=A&end=B", headers=headers, environ_base={'REMOTE_ADDR': '203.0.113.5'}).status_code == 200
+    limited = client.get("/api/trip/stream?start=A&end=B", headers=headers, environ_base={'REMOTE_ADDR': '203.0.113.5'})
+    assert limited.status_code == 429
+    assert "Rate limit" in limited.get_json()["error"]
