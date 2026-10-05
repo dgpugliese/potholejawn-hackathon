@@ -45,9 +45,9 @@ class _RateLimiter:
         self._recent: list[float] = []
         self._active = 0
 
-    def try_acquire(self, ip: str) -> bool:
+    def try_acquire(self, ip: str, is_local: bool) -> bool:
         """Reserve a run slot for this IP; False means 'limited, refuse'."""
-        if ip in _LOCAL_IPS:
+        if is_local:
             return True
         now = time.monotonic()
         with self._lock:
@@ -65,8 +65,8 @@ class _RateLimiter:
             self._active += 1
             return True
 
-    def release(self, ip: str) -> None:
-        if ip in _LOCAL_IPS:
+    def release(self, ip: str, is_local: bool) -> None:
+        if is_local:
             return
         with self._lock:
             self._active = max(0, self._active - 1)
@@ -88,6 +88,9 @@ def create_app() -> Flask:
     def client_ip() -> str:
         # Behind the Cloudflare tunnel the real client is in CF-Connecting-IP.
         return request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
+
+    def is_local_request() -> bool:
+        return request.remote_addr in _LOCAL_IPS and not request.headers.get("CF-Connecting-IP")
 
     @app.get("/")
     def index():
@@ -174,7 +177,7 @@ def create_app() -> Flask:
         if hit is not None:  # before the limiter: cache hits are free
             return jsonify({**hit, "cached": True})
         ip = client_ip()
-        if not limiter.try_acquire(ip):
+        if not limiter.try_acquire(ip, is_local_request()):
             return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
         try:
             result = plan_trip(start, end, use_agent=use_agent)
@@ -188,7 +191,7 @@ def create_app() -> Flask:
                 {"error": "A map or city data service is not responding. Try again."}
             ), 502
         finally:
-            limiter.release(ip)
+            limiter.release(ip, is_local_request())
 
     @app.get("/api/trip/stream")
     def trip_stream():
@@ -218,9 +221,11 @@ def create_app() -> Flask:
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
         ip = client_ip()
-        if not limiter.try_acquire(ip):
+        if not limiter.try_acquire(ip, is_local_request()):
             return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
         events: queue.Queue = queue.Queue()
+
+        is_local = is_local_request()
 
         def worker() -> None:
             try:
@@ -240,7 +245,7 @@ def create_app() -> Flask:
                     )
                 )
             finally:
-                limiter.release(ip)
+                limiter.release(ip, is_local)
                 events.put(None)  # sentinel: stream is done
 
         threading.Thread(target=worker, daemon=True).start()
@@ -282,8 +287,10 @@ def create_app() -> Flask:
             events.put(None)
         else:
             ip = client_ip()
-            if not limiter.try_acquire(ip):
+            if not limiter.try_acquire(ip, is_local_request()):
                 return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
+
+            is_local = is_local_request()
 
             def worker() -> None:
                 try:
@@ -299,7 +306,7 @@ def create_app() -> Flask:
                     app.logger.exception("analyst question failed")
                     events.put(("ask_error", {"error": "The analyst hit an error. Try again."}))
                 finally:
-                    limiter.release(ip)
+                    limiter.release(ip, is_local)
                     events.put(None)  # sentinel: stream is done
 
             threading.Thread(target=worker, daemon=True).start()
