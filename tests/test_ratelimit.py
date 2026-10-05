@@ -34,6 +34,22 @@ def test_global_hourly_limit_trips_across_ips(monkeypatch):
     assert "Rate limit" in limited.get_json()["error"]
 
 
+def test_spoofed_local_ip_does_not_bypass_rate_limit(monkeypatch):
+    monkeypatch.setattr(webapp, "RATE_MAX_PER_IP", 1)
+    client = _client(monkeypatch)
+
+    # Simulate an external attacker spoofing CF-Connecting-IP as 127.0.0.1
+    headers = {"CF-Connecting-IP": "127.0.0.1"}
+
+    # First request succeeds (under limit)
+    assert client.get("/api/trip/stream?start=A&end=B", headers=headers).status_code == 200
+
+    # Second request should be rate-limited, even though the header says 127.0.0.1
+    limited = client.get("/api/trip/stream?start=A&end=B", headers=headers)
+    assert limited.status_code == 429
+    assert "Rate limit" in limited.get_json()["error"]
+
+
 def test_localhost_is_exempt(monkeypatch):
     monkeypatch.setattr(webapp, "RATE_MAX_PER_IP", 0)
     monkeypatch.setattr(webapp, "RATE_MAX_PER_HOUR", 0)
