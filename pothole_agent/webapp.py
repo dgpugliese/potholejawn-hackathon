@@ -323,6 +323,15 @@ def create_app() -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' https://cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+            "https://cdnjs.cloudflare.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
+            "img-src 'self' data: https://server.arcgisonline.com; "
+            "connect-src 'self'"
+        )
         return response
 
     return app
