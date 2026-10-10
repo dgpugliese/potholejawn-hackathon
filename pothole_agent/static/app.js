@@ -824,7 +824,7 @@
     });
 
     [trip.start, trip.end].forEach(function (place) {
-      if (place) L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).bindPopup(place.matched_address).addTo(layers);
+      if (place) L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).bindPopup(el("div", "", place.matched_address)).addTo(layers);
     });
   }
 
