@@ -1,0 +1,32 @@
+ * Serving Flask app 'webapp'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [15/Oct/2026 08:54:40] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:54:40] "GET /static/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:54:40] "GET /static/logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:54:40] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:54:40] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:55:35] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:55:35] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:55:35] "GET /static/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:55:35] "GET /static/logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:55:35] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:56:25] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:56:25] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:56:25] "GET /static/logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:56:25] "GET /static/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:56:26] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:57:19] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:57:19] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:57:19] "GET /static/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:57:19] "GET /static/logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:57:19] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:15] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:15] "GET /static/app.js HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:15] "GET /static/style.css HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:15] "GET /static/logo.png HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:15] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:18] "GET /api/potholes?bbox=39.90526,-75.27506,40.00000,-75.05533 HTTP/1.1" 200 -
+127.0.0.1 - - [15/Oct/2026 08:58:18] "GET /api/trip/stream?start=<img%20src%3Dx%20onerror%3Dalert(1)>&end=30th%20Street%20Station HTTP/1.1" 200 -
