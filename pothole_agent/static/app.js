@@ -1154,6 +1154,323 @@
     };
   });
 
+
+  // ---- Live navigation --------------------------------------------------------
+  // Follows the device's position along the active route like Google Maps or
+  // Waze: a maneuver banner with distance, voice guidance, a warning for each
+  // reported pothole ahead, and a fresh smooth route from /api/navigate when
+  // the driver leaves the route. "Preview drive" replays the route without GPS
+  // through the exact same code path, so the whole flow is testable at a desk.
+  const NAV_ZOOM = 17;
+  const OFF_ROUTE_M = 45;        // further than this from the line counts as off route
+  const OFF_ROUTE_FIXES = 2;     // consecutive off-route fixes before re-routing
+  const REROUTE_MIN_GAP_MS = 8000;
+  const ARRIVE_M = 30;
+  const STEP_DONE_M = 18;        // a maneuver this close behind is considered done
+  const ANNOUNCE_NEAR_M = 120;
+  const POTHOLE_AHEAD_M = 160;
+  const M_PER_DEG_LAT = 111132;
+  const M_PER_DEG_LON = 111320 * Math.cos((40 * Math.PI) / 180);
+
+  const nav = {
+    active: false, route: null, dest: null, watchId: null, puck: null, layer: L.layerGroup(),
+    pts: [], cum: [], total: 0, steps: [], potholes: [], stepIdx: -1, offCount: 0,
+    lastReroute: 0, rerouting: false, spoken: {}, sim: null, muted: false, wakeLock: null,
+    lastFix: null, heading: 0, alertTimer: null,
+  };
+  const navEl = document.getElementById("nav");
+  const navArrow = document.getElementById("nav-arrow");
+  const navDistance = document.getElementById("nav-distance");
+  const navInstruction = document.getElementById("nav-instruction");
+  const navNext = document.getElementById("nav-next");
+  const navAlert = document.getElementById("nav-alert");
+  const navEta = document.getElementById("nav-eta");
+  const navRemaining = document.getElementById("nav-remaining");
+  const ARROWS = {
+    left: "↰", right: "↱", "slight left": "↖", "slight right": "↗",
+    "sharp left": "↰", "sharp right": "↱", uturn: "↩", straight: "↑",
+    arrive: "⚑", "": "↑",
+  };
+
+  function toXY(lat, lon) { return { x: lon * M_PER_DEG_LON, y: lat * M_PER_DEG_LAT }; }
+
+  function prepareNavRoute(route) {
+    // Project the polyline once; every GPS fix then snaps against it.
+    nav.route = route;
+    nav.pts = route.coordinates.map((c) => toXY(c[1], c[0]));
+    nav.cum = [0];
+    for (let i = 1; i < nav.pts.length; i++) {
+      nav.cum.push(nav.cum[i - 1] + Math.hypot(nav.pts[i].x - nav.pts[i - 1].x, nav.pts[i].y - nav.pts[i - 1].y));
+    }
+    nav.total = nav.cum[nav.cum.length - 1] || 0;
+    nav.steps = (route.steps || []).map(function (step) {
+      const at = step.location ? snapToRoute(step.location[1], step.location[0]).along : null;
+      return { text: step.text, modifier: step.modifier || "", along: at };
+    }).filter((s) => s.along !== null);
+    nav.potholes = (route.potholes || []).map(function (p) {
+      const snap = snapToRoute(p.lat, p.lon);
+      return { id: p.id, along: snap.along, address: p.address, announced: false };
+    });
+    nav.stepIdx = -1;
+    nav.spoken = {};
+    nav.offCount = 0;
+    drawNavRoute();
+  }
+
+  function snapToRoute(lat, lon) {
+    // Nearest point on the polyline: {dist (m off route), along (m from start)}.
+    const p = toXY(lat, lon);
+    let best = { dist: Infinity, along: 0, seg: 0 };
+    for (let i = 1; i < nav.pts.length; i++) {
+      const a = nav.pts[i - 1], b = nav.pts[i];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const d = Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+      if (d < best.dist) best = { dist: d, along: nav.cum[i - 1] + t * Math.sqrt(len2), seg: i - 1 };
+    }
+    return best;
+  }
+
+  function drawNavRoute() {
+    nav.layer.clearLayers();
+    const latlngs = nav.route.coordinates.map((c) => [c[1], c[0]]);
+    L.polyline(latlngs, { color: COLORS.recommended, weight: 8, opacity: 0.9 }).addTo(nav.layer);
+    (nav.route.potholes || []).forEach(function (p) {
+      const old = p.days_open >= OLD_REPORT_DAYS;
+      L.marker([p.lat, p.lon], { icon: divIcon("pothole-marker" + (old ? " old" : ""), 20), interactive: false }).addTo(nav.layer);
+    });
+    if (nav.dest) L.marker([nav.dest.lat, nav.dest.lon], { icon: divIcon("endpoint-marker", 16), interactive: false }).addTo(nav.layer);
+    if (!nav.puck) {
+      nav.puck = L.marker(latlngs[0], {
+        icon: L.divIcon({ className: "", html: '<div class="nav-puck"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }),
+        interactive: false, zIndexOffset: 1000,
+      });
+    }
+    nav.puck.addTo(nav.layer);
+  }
+
+  function fmtDistance(m) {
+    const feet = m * 3.28084;
+    if (feet < 1000) return Math.max(0, Math.round(feet / 50) * 50) + " ft";
+    return (m / 1609.344).toFixed(1) + " mi";
+  }
+
+  function speak(text, key) {
+    if (key) { if (nav.spoken[key]) return; nav.spoken[key] = true; }
+    if (nav.muted || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    } catch (err) { /* voice is a bonus, never a blocker */ }
+  }
+
+  function showAlert(text, kind, ms) {
+    navAlert.textContent = text;
+    navAlert.className = "nav-alert" + (kind ? " " + kind : "");
+    navAlert.hidden = false;
+    clearTimeout(nav.alertTimer);
+    if (ms) nav.alertTimer = setTimeout(function () { navAlert.hidden = true; }, ms);
+  }
+
+  function updateBanner(along) {
+    // The current maneuver is the first one still ahead of the driver.
+    let idx = nav.steps.findIndex((s) => s.along > along - STEP_DONE_M);
+    if (idx === -1) idx = nav.steps.length - 1;
+    const step = nav.steps[idx];
+    if (!step) return;
+    const toGo = Math.max(0, step.along - along);
+    if (idx !== nav.stepIdx) {
+      nav.stepIdx = idx;
+      if (toGo > ANNOUNCE_NEAR_M) speak("In " + fmtDistance(toGo).replace(" mi", " miles").replace(" ft", " feet") + ", " + step.text, "start-" + idx);
+    }
+    if (toGo <= ANNOUNCE_NEAR_M) speak(step.text, "near-" + idx);
+    navArrow.textContent = ARROWS[step.modifier] || ARROWS[""];
+    navDistance.textContent = toGo < 15 ? "Now" : "In " + fmtDistance(toGo);
+    navInstruction.textContent = step.text;
+    const next = nav.steps[idx + 1];
+    navNext.hidden = !next;
+    if (next) navNext.textContent = "Then " + next.text.charAt(0).toLowerCase() + next.text.slice(1);
+
+    const remaining = Math.max(0, nav.total - along);
+    const minutes = nav.total ? Math.max(1, Math.round((remaining / nav.total) * nav.route.minutes)) : 0;
+    const eta = new Date(Date.now() + minutes * 60000);
+    navEta.textContent = eta.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    navRemaining.textContent = minutes + " min\u00a0\u00b7\u00a0" + (remaining / 1609.344).toFixed(1) + " mi" +
+      (nav.route.kind === "smooth" ? "\u00a0\u00b7\u00a0smooth route" : "");
+
+    // Reported potholes just ahead get a heads-up, once each.
+    nav.potholes.forEach(function (p) {
+      if (p.announced || p.along < along - 5 || p.along > along + POTHOLE_AHEAD_M) return;
+      p.announced = true;
+      showAlert("Reported pothole ahead\u00a0\u00b7\u00a0" + fmtDistance(Math.max(0, p.along - along)), "", 6000);
+      speak("Reported pothole ahead", "pothole-" + p.id);
+    });
+  }
+
+  function onPosition(lat, lon, heading) {
+    if (!nav.active) return;
+    if (typeof heading === "number" && !isNaN(heading)) nav.heading = heading;
+    else if (nav.lastFix) {
+      const a = toXY(nav.lastFix.lat, nav.lastFix.lon), b = toXY(lat, lon);
+      if (Math.hypot(b.x - a.x, b.y - a.y) > 3) nav.heading = (Math.atan2(b.x - a.x, b.y - a.y) * 180) / Math.PI;
+    }
+    nav.lastFix = { lat: lat, lon: lon };
+    nav.puck.setLatLng([lat, lon]);
+    const puckEl = nav.puck.getElement() && nav.puck.getElement().querySelector(".nav-puck");
+    if (puckEl) puckEl.style.transform = "rotate(" + Math.round(nav.heading) + "deg)";
+    map.setView([lat, lon], Math.max(map.getZoom(), NAV_ZOOM), { animate: true, duration: 0.4 });
+
+    const toDest = toXY(nav.dest.lat, nav.dest.lon), here = toXY(lat, lon);
+    if (Math.hypot(toDest.x - here.x, toDest.y - here.y) <= ARRIVE_M) { arrive(); return; }
+
+    const snap = snapToRoute(lat, lon);
+    if (snap.dist > OFF_ROUTE_M) {
+      nav.offCount += 1;
+      if (nav.offCount >= OFF_ROUTE_FIXES && !nav.rerouting && Date.now() - nav.lastReroute > REROUTE_MIN_GAP_MS) {
+        reroute(lat, lon);
+      }
+      return; // keep the last banner until the new route arrives
+    }
+    nav.offCount = 0;
+    updateBanner(snap.along);
+  }
+
+  function reroute(lat, lon) {
+    nav.rerouting = true;
+    nav.lastReroute = Date.now();
+    showAlert("Re-routing around the potholes…", "reroute");
+    speak("Re-routing");
+    const avoid = form.avoid.value === "strong" ? "strong" : "balanced";
+    fetch("/api/navigate?from=" + lat.toFixed(6) + "," + lon.toFixed(6) +
+          "&to=" + nav.dest.lat.toFixed(6) + "," + nav.dest.lon.toFixed(6) + "&avoid=" + avoid)
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data: data })))
+      .then(function (res) {
+        nav.rerouting = false;
+        if (!nav.active) return;
+        if (!res.ok || !res.data.coordinates) throw new Error(res.data.error || "re-route failed");
+        prepareNavRoute(res.data);
+        navAlert.hidden = true;
+        const n = (res.data.potholes || []).length;
+        showAlert("New route: " + n + " reported pothole" + (n === 1 ? "" : "s") + " ahead", "reroute", 4000);
+        if (nav.sim) nav.sim.restartFrom(lat, lon);
+        updateBanner(snapToRoute(lat, lon).along);
+      })
+      .catch(function (err) {
+        nav.rerouting = false;
+        nav.offCount = 0; // try again after the next few fixes
+        showAlert(String(err.message || err), "error", 5000);
+      });
+  }
+
+  function arrive() {
+    navArrow.textContent = ARROWS.arrive;
+    navDistance.textContent = "Arrived";
+    navInstruction.textContent = "You have reached your destination.";
+    navNext.hidden = true;
+    speak("You have arrived at your destination", "arrived");
+    stopSim();
+    setTimeout(stopNavigation, 4000);
+  }
+
+  function startNavigation(simulate) {
+    const route = trip.routes.find((r) => r.route_id === activeId);
+    if (!route || !trip.end) return;
+    nav.active = true;
+    nav.dest = { lat: trip.end.lat, lon: trip.end.lon };
+    nav.muted = false;
+    document.getElementById("nav-mute").setAttribute("aria-pressed", "false");
+    document.body.classList.add("navigating");
+    closePanel();
+    hideCitywide();
+    layers.clearLayers();
+    nav.layer.addTo(map);
+    prepareNavRoute(route);
+    navEl.hidden = false;
+    navAlert.hidden = true;
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      navigator.wakeLock.request("screen").then(function (lock) { nav.wakeLock = lock; }).catch(function () {});
+    }
+    speak("Starting navigation on the " + (route.kind === "smooth" ? "smooth" : "fastest") + " route");
+    if (simulate) { startSim(); return; }
+    if (!navigator.geolocation) {
+      showAlert("Location is not available here. Showing a preview instead.", "error", 5000);
+      startSim();
+      return;
+    }
+    nav.watchId = navigator.geolocation.watchPosition(
+      function (pos) { onPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.heading); },
+      function () { showAlert("Waiting for a GPS fix… check location permission.", "error", 6000); },
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
+    );
+  }
+
+  function stopNavigation() {
+    if (!nav.active) return;
+    nav.active = false;
+    stopSim();
+    if (nav.watchId !== null) { navigator.geolocation.clearWatch(nav.watchId); nav.watchId = null; }
+    if (nav.wakeLock) { nav.wakeLock.release().catch(function () {}); nav.wakeLock = null; }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    navEl.hidden = true;
+    document.body.classList.remove("navigating");
+    map.removeLayer(nav.layer);
+    nav.layer.clearLayers();
+    nav.puck = null;
+    if (trip) { openPanel(); selectRoute(activeId); }
+  }
+
+  // Preview: glide along the route at ~25 mph, feeding the same onPosition().
+  function startSim() {
+    stopSim();
+    const sim = { along: 0, timer: null, speed: 11, restartFrom: null };
+    sim.restartFrom = function (lat, lon) { sim.along = snapToRoute(lat, lon).along; };
+    sim.timer = setInterval(function () {
+      if (!nav.active || nav.rerouting) return;
+      sim.along = Math.min(nav.total, sim.along + sim.speed * 0.5);
+      const p = pointAlong(sim.along);
+      onPosition(p[0], p[1], null);
+      if (sim.along >= nav.total) stopSim();
+    }, 500);
+    nav.sim = sim;
+  }
+
+  function stopSim() {
+    if (nav.sim) { clearInterval(nav.sim.timer); nav.sim = null; }
+  }
+
+  function pointAlong(along) {
+    const coords = nav.route.coordinates;
+    for (let i = 1; i < nav.cum.length; i++) {
+      if (nav.cum[i] >= along) {
+        const span = nav.cum[i] - nav.cum[i - 1] || 1;
+        const t = (along - nav.cum[i - 1]) / span;
+        return [coords[i - 1][1] + t * (coords[i][1] - coords[i - 1][1]), coords[i - 1][0] + t * (coords[i][0] - coords[i - 1][0])];
+      }
+    }
+    const last = coords[coords.length - 1];
+    return [last[1], last[0]];
+  }
+
+  document.getElementById("nav-start").addEventListener("click", function () { startNavigation(false); });
+  document.getElementById("nav-preview").addEventListener("click", function () { startNavigation(true); });
+  document.getElementById("nav-exit").addEventListener("click", stopNavigation);
+  document.getElementById("nav-mute").addEventListener("click", function () {
+    nav.muted = !nav.muted;
+    this.setAttribute("aria-pressed", String(nav.muted));
+    this.textContent = nav.muted ? "\u{1F507}" : "\u{1F50A}";
+    this.setAttribute("aria-label", nav.muted ? "Unmute voice guidance" : "Mute voice guidance");
+    if (nav.muted && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && nav.active) stopNavigation();
+  });
+  // Test hook: ?sim=1 lets a script feed positions (used by the automated checks).
+  if (new URLSearchParams(location.search).get("sim") === "1") {
+    window.__pjNav = { feedPosition: onPosition, state: nav, start: startNavigation, stop: stopNavigation };
+  }
+
   // A shared link (?from=&to=&avoid=) plans the trip as soon as the page loads.
   (function runFromUrl() {
     const params = new URLSearchParams(location.search);

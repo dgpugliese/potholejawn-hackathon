@@ -320,3 +320,21 @@ def test_geocode_rejects_coordinates_outside_philly():
 
     with pytest.raises(RoutingError):
         geocode("40.7128, -74.0060")  # New York City
+
+
+def test_navigate_endpoint_validates_and_reroutes(monkeypatch):
+    from pothole_agent import webapp
+
+    calls = []
+
+    def fake_navigate(start_lat, start_lon, end_lat, end_lon, avoidance):
+        calls.append((start_lat, start_lon, end_lat, end_lon, avoidance))
+        return {"route_id": "S", "coordinates": LINE, "steps": [], "potholes": []}
+
+    monkeypatch.setattr(webapp, "navigate", fake_navigate)
+    client = create_app().test_client()
+    assert client.get("/api/navigate?from=junk&to=39.9,-75.1").status_code == 400
+    assert client.get("/api/navigate?from=40.7128,-74.0060&to=39.9,-75.1").status_code == 400
+    ok = client.get("/api/navigate?from=39.95,-75.16&to=39.9061,-75.1665&avoid=strong")
+    assert ok.status_code == 200 and ok.get_json()["route_id"] == "S"
+    assert calls == [(39.95, -75.16, 39.9061, -75.1665, "strong")]

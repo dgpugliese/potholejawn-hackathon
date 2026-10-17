@@ -15,8 +15,8 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from .agent import investigate
-from .routing import MAX_ADDRESS_CHARS, RoutingError, potholes_in_bbox
-from .smooth import graph_status, normalize_avoidance
+from .routing import MAX_ADDRESS_CHARS, RoutingError, in_philadelphia, potholes_in_bbox
+from .smooth import graph_status, navigate, normalize_avoidance
 from .trip import plan_trip
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -180,6 +180,35 @@ def create_app() -> Flask:
                 potholes_cache.clear()
             potholes_cache[key] = (now, rows)
         return jsonify({"potholes": rows, "cached": False})
+
+    def parse_point(value: str) -> tuple[float, float] | None:
+        try:
+            lat, lon = (float(part) for part in str(value).split(","))
+        except ValueError:
+            return None
+        return (lat, lon) if in_philadelphia(lat, lon) else None
+
+    @app.get("/api/navigate")
+    def navigate_endpoint():
+        """Re-route from a live position: ?from=lat,lon&to=lat,lon&avoid=balanced.
+
+        Used by navigation mode when the driver leaves the route. No model
+        tokens are spent, so it is not behind the agent rate limiter; the
+        browser only calls it after an off-route fix, at most every few
+        seconds.
+        """
+        start = parse_point(request.args.get("from", ""))
+        end = parse_point(request.args.get("to", ""))
+        if start is None or end is None:
+            return jsonify({"error": "from and to must be lat,lon inside Philadelphia"}), 400
+        avoidance = normalize_avoidance(request.args.get("avoid"))
+        try:
+            return jsonify(navigate(*start, *end, avoidance))
+        except RoutingError as error:
+            return jsonify({"error": str(error)}), 400
+        except Exception:  # never leak internals to the browser
+            app.logger.exception("re-route failed")
+            return jsonify({"error": "Could not re-route right now. Keep following the road."}), 502
 
     @app.post("/api/trip")
     def trip():

@@ -46,8 +46,9 @@ Manager. See docs/deploy.md. The street graph ships in the image; rebuild it wit
 
 ## Status (Oct 17, 2026)
 Smooth router, directions, avoidance switch, share links, Google Maps hand-off,
-and the Cloud Build pipeline are built and tested (62 tests, fallback path verified
-live). The agent path with `find_smooth_route` is unit-tested with a fake client;
+live navigation (GPS following, voice, pothole-ahead alerts, off-route re-routing
+via /api/navigate, preview mode), and the Cloud Build pipeline are built and
+tested (65 tests, fallback and navigation paths verified live in a browser). The agent path with `find_smooth_route` is unit-tested with a fake client;
 run it once against the real API after setting ANTHROPIC_API_KEY in .env.
 
 ## Next steps, in order

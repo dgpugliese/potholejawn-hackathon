@@ -22,8 +22,11 @@ fastest driving routes, then **re-plans the drive on its own street graph with
 every open 311 pothole report as a time penalty**, verifies each route against
 the city's live data, and recommends one. An AI agent runs the tools and writes
 the briefing; a plain-Python planner produces the same result when it cannot.
-Every route comes with turn-by-turn directions and a one-tap hand-off to Google
-Maps that carries the smooth route's waypoints.
+Then tap **Start navigation**: the map follows your position with a maneuver
+banner, voice guidance, a heads-up for every reported pothole ahead, and an
+automatic smooth re-route when you leave the route. Every route also has
+turn-by-turn directions and a one-tap hand-off to Google Maps that carries the
+smooth route's waypoints.
 
 Built solo by David Pugliese at the **Code & Coffee Philadelphia AI Agent Hackathon, September 20, 2026**.
 
@@ -33,7 +36,7 @@ Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](h
 
 - The map opens on **every open pothole report in Philly right now**, plotted citywide and clickable.
 - Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data (Oct 2026): the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
-- Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Drive this in Google Maps** or copy a share link (`/?from=…&to=…&avoid=strong`).
+- Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?from=…&to=…&avoid=strong`).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
 - After a trip, open **"What the agent did"** for the full audit trail, or ask the **311 analyst** an open-ended question ("where is the city slowest at fixing potholes?") right in the panel.
 
@@ -122,6 +125,18 @@ offer alternatives. So potholejawn routes on its own copy of the city's streets:
 The deterministic pick (used when the agent is unavailable, and suggested to
 it) scores each route as minutes plus the same time value per report the router
 optimised with, so the recommendation agrees with the plan.
+
+### Live navigation (`static/app.js`, `/api/navigate`)
+
+Navigation runs in the browser against the route's own geometry: each GPS fix
+is snapped to the polyline, the next maneuver (OSRM's maneuver locations)
+drives the banner and the voice prompt, and every reported pothole on the
+route is announced when it is within 160 m ahead. Two consecutive fixes more
+than 45 m off the line trigger a re-route: `/api/navigate` runs the smooth
+router from the current position (no model call, about a second) and the new
+route takes over without leaving navigation. The screen stays awake via the
+Wake Lock API where supported. "Preview drive" replays the route through the
+same code path, which is how the flow is tested without a car.
 
 The analyst agent (`pothole_agent/agent.py`, `tools.py`) uses `get_schema`,
 `list_categories`, and `run_sql`. When a query fails, the error goes back to the

@@ -127,12 +127,22 @@ def _graph_route_to_route(plan: SmoothRoute, route_id: str) -> Route:
             "text": f"Continue on {street['name']}",
             "miles": round(street["meters"] / METERS_PER_MILE, 2),
             "minutes": 0.0,
+            "location": street["at"],  # [lon, lat] where the street begins
+            "modifier": "",
         }
         for street in plan.streets
     ]
     if steps:
         steps[0]["text"] = steps[0]["text"].replace("Continue on", "Head out on", 1)
-        steps.append({"text": "Arrive at your destination", "miles": 0.0, "minutes": 0.0})
+        steps.append(
+            {
+                "text": "Arrive at your destination",
+                "miles": 0.0,
+                "minutes": 0.0,
+                "location": plan.coordinates[-1],
+                "modifier": "arrive",
+            }
+        )
     return Route(
         route_id=route_id,
         kind="smooth",
@@ -185,6 +195,40 @@ def smooth_route(
             len(waypoints),
         )
     return _graph_route_to_route(plan, route_id)
+
+
+def navigate(
+    start_lat: float,
+    start_lon: float,
+    end_lat: float,
+    end_lon: float,
+    avoidance: str = DEFAULT_AVOIDANCE,
+) -> dict[str, Any]:
+    """A fresh route from the driver's current position, for live re-routing.
+
+    No model call: the smooth router plus the Carto corridor scan, in about a
+    second. If the street graph is unavailable, OSRM's fastest route is used so
+    navigation never dead-ends.
+    """
+    from .routing import fetch_routes, potholes_along  # local import: avoids a cycle at load
+
+    try:
+        route = smooth_route(start_lat, start_lon, end_lat, end_lon, avoidance)
+    except GraphError:
+        route = fetch_routes(start_lat, start_lon, end_lat, end_lon)[0]
+    route.potholes = potholes_along(route)
+    return {
+        "route_id": route.route_id,
+        "kind": route.kind,
+        "source": route.source,
+        "miles": route.miles,
+        "minutes": route.minutes,
+        "coordinates": route.coordinates,
+        "steps": route.steps,
+        "via": route.via,
+        "potholes": route.potholes,
+        "avoidance": normalize_avoidance(avoidance),
+    }
 
 
 def score(route: Route, avoidance: str = DEFAULT_AVOIDANCE) -> float:

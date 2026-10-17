@@ -513,7 +513,8 @@ class StreetGraph:
             if streets and streets[-1]["name"] == name:
                 streets[-1]["meters"] += length
             else:
-                streets.append({"name": name, "meters": length})
+                first = segment[0]
+                streets.append({"name": name, "meters": length, "at": [first[1], first[0]]})
             mid = segment[len(segment) // 2]
             bearing = _bearing(segment[0], segment[-1])
             via.append({"lat": mid[0], "lon": mid[1], "bearing": bearing, "meters": length})

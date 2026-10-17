@@ -233,7 +233,35 @@ def test_describe_step_formats_osrm_maneuvers():
         "text": "Turn left onto North Broad Street",
         "miles": 1.0,
         "minutes": 2.0,
+        "location": None,
+        "modifier": "left",
     }
+    located = {**turn, "maneuver": {**turn["maneuver"], "location": [-75.16, 39.95]}}
+    assert _describe_step(located)["location"] == [-75.16, 39.95]
     depart = {"maneuver": {"type": "depart", "bearing_after": 180}, "name": "", "ref": "I 95"}
     assert _describe_step(depart)["text"] == "Head south on I 95"
     assert _describe_step({"maneuver": {"type": "notification"}}) is None
+
+
+def test_graph_route_steps_carry_locations_for_navigation(smooth_env, monkeypatch):
+    monkeypatch.setattr(smooth, "fetch_route_via", lambda *a, **k: None)
+    route = smooth.smooth_route(39.95, -75.16, 39.95 - 2 * STEP, -75.16 + 2 * STEP)
+    assert all(isinstance(step["location"], list) for step in route.steps)
+    assert route.steps[-1]["modifier"] == "arrive"
+    assert route.steps[-1]["location"] == route.coordinates[-1]
+
+
+def test_navigate_falls_back_to_osrm_when_graph_is_missing(monkeypatch):
+    from pothole_agent import smooth as smooth_module
+
+    def no_graph(*_, **__):
+        raise smooth_module.GraphError("no graph")
+
+    monkeypatch.setattr(smooth_module, "smooth_route", no_graph)
+    monkeypatch.setattr(
+        "pothole_agent.routing.fetch_routes", lambda *_: [Route("A", 1.0, 3, [[0, 0], [1, 1]])]
+    )
+    monkeypatch.setattr("pothole_agent.routing.potholes_along", lambda route, buffer_m=30: [])
+    result = smooth_module.navigate(39.95, -75.16, 39.94, -75.15, "strong")
+    assert result["route_id"] == "A" and result["potholes"] == []
+    assert result["avoidance"] == "strong"

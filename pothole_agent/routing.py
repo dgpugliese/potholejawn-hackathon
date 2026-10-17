@@ -199,10 +199,15 @@ def _describe_step(step: dict[str, Any]) -> dict[str, Any] | None:
         if not name:  # ramps and exits are often unnamed: "Take the exit right"
             text = text.replace(" onto ", "").replace(" on ", "").rstrip()
     text = text.replace("  ", " ").replace("Continue straight on", "Continue on")
+    location = maneuver.get("location")  # [lon, lat] where the maneuver happens
     return {
         "text": text,
         "miles": round(step.get("distance", 0.0) / METERS_PER_MILE, 2),
         "minutes": round(step.get("duration", 0.0) / 60, 1),
+        "location": [round(float(location[0]), 6), round(float(location[1]), 6)]
+        if isinstance(location, list) and len(location) == 2
+        else None,
+        "modifier": str(maneuver.get("modifier", "")) if kind != "arrive" else "arrive",
     }
 
 
@@ -220,7 +225,16 @@ def _route_from_osrm(raw: dict[str, Any], route_id: str, kind: str = "fast") -> 
                 continue
             steps.append(described)
     if steps and not steps[-1]["text"].startswith("Arrive"):
-        steps.append({"text": "Arrive at your destination", "miles": 0.0, "minutes": 0.0})
+        last = raw["geometry"]["coordinates"][-1]
+        steps.append(
+            {
+                "text": "Arrive at your destination",
+                "miles": 0.0,
+                "minutes": 0.0,
+                "location": [round(last[0], 6), round(last[1], 6)],
+                "modifier": "arrive",
+            }
+        )
     return Route(
         route_id=route_id,
         kind=kind,
