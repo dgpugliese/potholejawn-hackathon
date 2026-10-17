@@ -139,6 +139,7 @@ def test_api_validates_input():
     assert client.post("/api/trip", json={"start": "", "end": "x"}).status_code == 400
     assert client.post("/api/trip", json={"start": "a" * 500, "end": "x"}).status_code == 400
     assert client.get("/healthz").get_json()["ok"] is True
+    assert client.get("/api/health").get_json()["ok"] is True
     assert "agent_available" not in client.get("/healthz").get_json()
 
 

@@ -42,6 +42,10 @@ def create_app() -> Flask:
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
 
+    # Google's front end answers /healthz itself on run.app and mapped domains
+    # (with its own 404), so the real check lives under /api/health. /healthz
+    # stays for local use and for load balancers that reach the container.
+    @app.get("/api/health")
     @app.get("/healthz")
     def health():
         return jsonify({"ok": True, "smooth_router": graph_status()})

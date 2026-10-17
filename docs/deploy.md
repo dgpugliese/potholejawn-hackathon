@@ -60,7 +60,7 @@ Verify a deploy:
 
 ```bash
 URL=$(gcloud run services describe potholejawn --region us-east4 --format='value(status.url)')
-curl -s "$URL/healthz"
+curl -s "$URL/api/health"   # /healthz is swallowed by Google's front end on run.app
 # {"ok": true, "smooth_router": {"available": true, ...}}
 ```
 
