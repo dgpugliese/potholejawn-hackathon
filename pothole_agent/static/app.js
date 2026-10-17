@@ -1012,6 +1012,9 @@
     briefing.append(el("span", "mode", "Based on open 311 reports from the last 12 months."));
     drawComparison();
     drawSteps();
+    results.classList.add("fresh"); // cards cascade in once; route taps re-render silently
+    clearTimeout(render.freshTimer);
+    render.freshTimer = setTimeout(function () { results.classList.remove("fresh"); }, 900);
     // Fresh trip: mobile starts the report list collapsed, desktop open (its
     // summary toggle is hidden). Set once here, not on every route tap.
     document.getElementById("list-disclosure").open = !mobileMq.matches;
@@ -1448,7 +1451,8 @@
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
     clearInterval(nav.limitTimer);
     clearInterval(nav.nightTimer);
-    closeSheets();
+    [navMenu, navAlts, navScrim].forEach(function (e) { e.classList.remove("closing"); e.hidden = true; });
+    document.getElementById("nav-menu-open").setAttribute("aria-expanded", "false");
     navRecenter.hidden = true;
     navEl.hidden = true;
     document.body.classList.remove("navigating", "night");
@@ -1655,17 +1659,44 @@
       .catch(function () { /* keep the last known limit */ });
   }
 
+  // Sheets animate out before they hide; a scrim dims the map underneath.
+  const navScrim = document.getElementById("nav-scrim");
+
+  function dismiss(element) {
+    if (element.hidden || element.classList.contains("closing")) return;
+    element.classList.add("closing");
+    const done = function () {
+      element.removeEventListener("animationend", done);
+      element.classList.remove("closing");
+      element.hidden = true;
+    };
+    element.addEventListener("animationend", done);
+    setTimeout(done, 300); // safety net if the animation is disabled
+  }
+
+  function reveal(element) {
+    element.classList.remove("closing");
+    element.hidden = false;
+  }
+
   function closeSheets() {
-    navMenu.hidden = true;
-    navAlts.hidden = true;
+    dismiss(navMenu);
+    dismiss(navAlts);
+    dismiss(navScrim);
     document.getElementById("nav-menu-open").setAttribute("aria-expanded", "false");
   }
 
+  function openSheet(sheet) {
+    if (sheet === navMenu) dismiss(navAlts); else dismiss(navMenu);
+    reveal(navScrim);
+    reveal(sheet);
+  }
+
+  navScrim.addEventListener("click", closeSheets);
   document.getElementById("nav-menu-open").addEventListener("click", function () {
-    const open = navMenu.hidden;
-    closeSheets();
-    navMenu.hidden = !open;
-    this.setAttribute("aria-expanded", String(open));
+    const willOpen = navMenu.hidden || navMenu.classList.contains("closing");
+    if (willOpen) openSheet(navMenu); else closeSheets();
+    this.setAttribute("aria-expanded", String(willOpen));
   });
   document.getElementById("nav-menu-close").addEventListener("click", closeSheets);
   document.getElementById("nav-alts-close").addEventListener("click", closeSheets);
@@ -1725,8 +1756,8 @@
   function altLabelLetter(route) { return route.route_id || "?"; }
 
   document.getElementById("nav-alts-open").addEventListener("click", function () {
-    closeSheets();
-    navAlts.hidden = false;
+    openSheet(navAlts);
+    document.getElementById("nav-menu-open").setAttribute("aria-expanded", "false");
     const list = document.getElementById("nav-alts-list");
     const status = document.getElementById("nav-alts-status");
     list.replaceChildren();
@@ -1737,7 +1768,7 @@
           "&to=" + nav.dest.lat.toFixed(6) + "," + nav.dest.lon.toFixed(6))
       .then((r) => r.json().then((data) => ({ ok: r.ok, data: data })))
       .then(function (res) {
-        if (navAlts.hidden) return;
+        if (navAlts.hidden || navAlts.classList.contains("closing")) return;
         if (!res.ok || !res.data.routes || !res.data.routes.length) throw new Error(res.data.error || "No alternatives right now.");
         status.hidden = true;
         res.data.routes.forEach(function (route) {
@@ -1779,7 +1810,10 @@
   function setMuteLabel() {
     const btn = document.getElementById("nav-mute");
     btn.setAttribute("aria-pressed", String(nav.muted));
-    btn.textContent = nav.muted ? "\u{1F507} Unmute voice" : "\u{1F50A} Mute voice";
+    btn.querySelector(".sheet-text b").textContent = nav.muted ? "Unmute voice" : "Mute voice";
+    btn.querySelector(".sheet-text small").textContent = nav.muted ? "Voice guidance is off" : "Guidance keeps showing on screen";
+    btn.querySelector(".icon-on").hidden = nav.muted;
+    btn.querySelector(".icon-off").hidden = !nav.muted;
   }
   document.getElementById("nav-mute").addEventListener("click", function () {
     nav.muted = !nav.muted;
@@ -1789,7 +1823,8 @@
   });
   document.addEventListener("keydown", function (event) {
     if (event.key !== "Escape" || !nav.active) return;
-    if (!navMenu.hidden || !navAlts.hidden) { closeSheets(); return; }
+    if ((!navMenu.hidden && !navMenu.classList.contains("closing")) ||
+        (!navAlts.hidden && !navAlts.classList.contains("closing"))) { closeSheets(); return; }
     if (settingsDialog.open) return;
     stopNavigation();
   });

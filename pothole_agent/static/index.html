@@ -51,23 +51,46 @@
         <b id="nav-eta">&mdash;</b>
         <span id="nav-remaining">&mdash;</span>
       </div>
-      <button id="nav-menu-open" class="nav-btn" type="button" aria-label="More options"
-              aria-haspopup="true" aria-expanded="false">&#8943;</button>
+      <button id="nav-menu-open" class="nav-btn nav-icon-btn" type="button" aria-label="More options"
+              aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.8" fill="currentColor" stroke="none"/></svg></button>
       <button id="nav-exit" class="nav-btn nav-exit" type="button">End</button>
     </div>
+    <div id="nav-scrim" class="nav-scrim" hidden></div>
     <div id="nav-menu" class="nav-sheet" hidden role="menu">
-      <button type="button" class="sheet-item" id="nav-alts-open" role="menuitem">&#x1F500; Alternative routes</button>
-      <button type="button" class="sheet-item" id="nav-overview" role="menuitem">&#x1F5FA;&#xFE0F; Route overview</button>
-      <button type="button" class="sheet-item" id="nav-mute" role="menuitem" aria-pressed="false">&#x1F50A; Mute voice</button>
-      <button type="button" class="sheet-item" id="nav-report" role="menuitem">&#x26A0;&#xFE0F; Report a pothole here</button>
-      <button type="button" class="sheet-item" id="nav-settings" role="menuitem">&#x2699;&#xFE0F; Vehicle, voice &amp; display</button>
-      <button type="button" class="sheet-item sheet-close" id="nav-menu-close" role="menuitem">Close</button>
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <button type="button" class="sheet-item" id="nav-alts-open" role="menuitem">
+        <span class="sheet-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span>
+        <span class="sheet-text"><b>Alternative routes</b><small>Compare options from where you are</small></span>
+        <svg class="sheet-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="sheet-item" id="nav-overview" role="menuitem">
+        <span class="sheet-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></span>
+        <span class="sheet-text"><b>Route overview</b><small>See the whole trip on the map</small></span>
+        <svg class="sheet-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="sheet-item" id="nav-mute" role="menuitem" aria-pressed="false">
+        <span class="sheet-icon"><span class="icon-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg></span><span class="icon-off" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/></svg></span></span>
+        <span class="sheet-text"><b>Mute voice</b><small>Guidance keeps showing on screen</small></span>
+        <svg class="sheet-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="sheet-item" id="nav-report" role="menuitem">
+        <span class="sheet-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+        <span class="sheet-text"><b>Report a pothole here</b><small>Drops a pin at your position</small></span>
+        <svg class="sheet-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="sheet-item" id="nav-settings" role="menuitem">
+        <span class="sheet-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6H3M21 12H3M21 18H3"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>
+        <span class="sheet-text"><b>Vehicle, voice &amp; display</b><small>Icon, colour, voice, units, night map</small></span>
+        <svg class="sheet-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      <button type="button" class="sheet-close" id="nav-menu-close" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Close</span></button>
     </div>
     <div id="nav-alts" class="nav-sheet" hidden aria-label="Alternative routes">
+      <div class="sheet-grip" aria-hidden="true"></div>
       <h2 class="sheet-title">Routes from here</h2>
       <p id="nav-alts-status" class="sheet-status">Comparing routes from your position&hellip;</p>
       <div id="nav-alts-list" class="alt-list"></div>
-      <button type="button" class="sheet-item sheet-close" id="nav-alts-close">Keep current route</button>
+      <button type="button" class="sheet-close" id="nav-alts-close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Keep current route</span></button>
     </div>
   </section>
 
@@ -146,7 +169,7 @@
                   aria-selected="false" aria-controls="mode-ask" tabindex="-1">Ask 311 data</button>
         </div>
         <button id="settings-open" class="gear-btn" type="button"
-                aria-label="Vehicle, voice and display settings">&#x2699;&#xFE0F;</button>
+                aria-label="Vehicle, voice and display settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6H3M21 12H3M21 18H3"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></button>
       </div>
 
       <section id="mode-trip" class="mode-panel" role="tabpanel" aria-labelledby="tab-trip">
@@ -161,7 +184,7 @@
             <input id="start" name="start" type="text" maxlength="200" required
                    placeholder="Temple University" value="Temple University">
             <button id="use-location" class="geo-btn" type="button"
-                    title="Use my current location" aria-label="Use my current location">&#x1F4CD;</button>
+                    title="Use my current location" aria-label="Use my current location"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg></button>
           </div>
           <label for="end">Going to</label>
           <input id="end" name="end" type="text" maxlength="200" required

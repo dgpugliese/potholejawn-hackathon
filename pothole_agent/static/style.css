@@ -1824,3 +1824,168 @@ input:focus-visible, button:focus-visible, summary:focus-visible, .route-sign:fo
   .trip-summary-edit { border-radius: 999px; }
   .peek-summary { background: transparent; }
 }
+
+/* =============================================================================
+   Motion and iconography: spring-style sheets, staggered reveals, SVG icons.
+   ========================================================================== */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* Inline icons: 1.8px round strokes, currentColor. */
+.sheet-icon svg, .sheet-chevron, .nav-icon-btn svg, .gear-btn svg, .geo-btn svg, .sheet-close svg {
+  width: 22px; height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+.gear-btn svg, .geo-btn svg { width: 19px; height: 19px; }
+.geo-btn { color: var(--asphalt-soft); }
+.geo-btn:hover { color: var(--ink); }
+.nav-icon-btn { display: grid; place-items: center; padding: 0; width: 44px; }
+.nav-icon-btn svg { transition: transform 300ms var(--ease-spring); }
+.nav-icon-btn[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+/* ---- Sheets ---- */
+.nav-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  background: rgba(27, 28, 30, 0.22);
+  animation: scrim-in 320ms var(--ease-out) both;
+}
+.nav-scrim.closing { animation: scrim-out 220ms var(--ease-in) both; }
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scrim-out { to { opacity: 0; } }
+
+.nav-sheet {
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  transform-origin: 50% 100%;
+  animation: sheet-up 420ms var(--ease-out) both;
+  will-change: transform, opacity;
+}
+.nav-sheet.closing { animation: sheet-down 240ms var(--ease-in) both; pointer-events: none; }
+@keyframes sheet-up {
+  from { opacity: 0; transform: translateY(28px) scale(0.96); }
+  60% { opacity: 1; }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes sheet-down { to { opacity: 0; transform: translateY(18px) scale(0.98); } }
+
+.sheet-grip {
+  width: 36px; height: 4px;
+  margin: 2px auto 10px;
+  border-radius: 999px;
+  background: rgba(27, 28, 30, 0.18);
+}
+
+.nav-sheet .sheet-item, .nav-sheet .alt-list .route-sign, .nav-sheet .sheet-title, .nav-sheet .sheet-status {
+  animation: item-in 460ms var(--ease-out) both;
+}
+.nav-sheet > :nth-child(2) { animation-delay: 40ms; }
+.nav-sheet > :nth-child(3) { animation-delay: 70ms; }
+.nav-sheet > :nth-child(4) { animation-delay: 100ms; }
+.nav-sheet > :nth-child(5) { animation-delay: 130ms; }
+.nav-sheet > :nth-child(6) { animation-delay: 160ms; }
+.nav-sheet > :nth-child(7) { animation-delay: 190ms; }
+.alt-list .route-sign:nth-child(1) { animation-delay: 60ms; }
+.alt-list .route-sign:nth-child(2) { animation-delay: 110ms; }
+.alt-list .route-sign:nth-child(3) { animation-delay: 160ms; }
+.alt-list .route-sign:nth-child(4) { animation-delay: 210ms; }
+@keyframes item-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sheet-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.6rem 0.6rem 0.6rem 0.5rem;
+  border-radius: 14px;
+  transition: background-color 160ms ease, transform 160ms var(--ease-out);
+}
+.sheet-item:hover { background: rgba(27, 28, 30, 0.05); }
+.sheet-item:active { transform: scale(0.985); background: rgba(255, 204, 0, 0.3); }
+.sheet-icon {
+  display: grid;
+  place-items: center;
+  width: 42px; height: 42px;
+  border-radius: 13px;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fff, #f1efe8);
+  box-shadow: inset 0 0 0 1px var(--edge), 0 1px 2px rgba(27, 28, 30, 0.06);
+}
+#nav-alts-open .sheet-icon { color: var(--sign-green); }
+#nav-overview .sheet-icon { color: var(--sign-blue); }
+#nav-report .sheet-icon { color: var(--cone); }
+#nav-mute[aria-pressed="true"] .sheet-icon { color: var(--muted); }
+.sheet-text { display: grid; gap: 1px; min-width: 0; }
+.sheet-text b { font-size: 0.98rem; font-weight: 700; line-height: 1.2; }
+.sheet-text small { font-size: 0.76rem; font-weight: 500; color: var(--muted); line-height: 1.3; }
+.sheet-chevron { color: rgba(27, 28, 30, 0.3); transition: transform 160ms var(--ease-out), color 160ms ease; }
+.sheet-item:hover .sheet-chevron { transform: translateX(2px); color: var(--ink); }
+
+.sheet-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: 0.65rem;
+  font: inherit;
+  font-weight: 700;
+  color: var(--asphalt-soft);
+  background: rgba(27, 28, 30, 0.05);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.sheet-close svg { width: 18px; height: 18px; }
+.sheet-close:hover { background: rgba(27, 28, 30, 0.09); color: var(--ink); }
+.nav-sheet .sheet-close { border-top: 0; }
+
+/* ---- Navigation enter/exit ---- */
+.nav-banner { animation: banner-in 520ms var(--ease-out) both; }
+.nav-footer { animation: footer-in 520ms 80ms var(--ease-out) both; }
+.nav-next { animation: item-in 460ms 160ms var(--ease-out) both; }
+@keyframes banner-in { from { opacity: 0; transform: translateY(-28px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes footer-in { from { opacity: 0; transform: translateY(28px) scale(0.98); } to { opacity: 1; transform: none; } }
+.nav-recenter, .nav-alert, .nav-toast { animation: pop-in 380ms var(--ease-spring) both; }
+@keyframes pop-in { from { opacity: 0; transform: translate(-50%, 10px) scale(0.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+.nav-banner, .nav-footer { transition: box-shadow 200ms ease; }
+
+/* ---- Trip results: cards cascade in once per trip, not on every tap ---- */
+#results.fresh .route-sign, #results.fresh .comparison, #results.fresh .briefing, #results.fresh .actions, #results.fresh details {
+  animation: item-in 520ms var(--ease-out) both;
+}
+#results.fresh .route-sign:nth-child(2) { animation-delay: 60ms; }
+#results.fresh .route-sign:nth-child(3) { animation-delay: 120ms; }
+#results.fresh .comparison { animation-delay: 200ms; }
+#results.fresh .briefing { animation-delay: 260ms; }
+#results.fresh .actions { animation-delay: 320ms; }
+#results.fresh details { animation-delay: 380ms; }
+
+/* ---- Settings dialog ---- */
+.settings[open] { animation: dialog-in 380ms var(--ease-out) both; }
+.settings[open]::backdrop { animation: scrim-in 300ms ease both; }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(16px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* ---- Buttons: a touch of spring on press ---- */
+.nav-btn, .action-link, #pill-go, button#go, .route-sign { transition: transform 220ms var(--ease-spring), box-shadow 220ms ease, background-color 160ms ease, opacity 160ms ease; }
+.nav-btn:active, .action-link:active { transform: scale(0.96); }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-sheet, .nav-sheet.closing, .nav-scrim, .nav-scrim.closing, .sheet-item, .alt-list .route-sign,
+  .nav-banner, .nav-footer, .nav-next, .nav-recenter, .nav-alert, .nav-toast,
+  #results.fresh .route-sign, #results.fresh .comparison, #results.fresh .briefing, #results.fresh .actions, #results.fresh details,
+  .settings[open], .settings[open]::backdrop { animation-duration: 1ms !important; animation-delay: 0ms !important; }
+}
