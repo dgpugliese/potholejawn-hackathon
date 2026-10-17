@@ -2000,3 +2000,52 @@ input:focus-visible, button:focus-visible, summary:focus-visible, .route-sign:fo
   margin: 0 auto;
   transform: none;
 }
+
+/* ---- Saved places ----------------------------------------------------------- */
+.saved-row { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-2) 0 var(--space-1); }
+.saved-row:empty { display: none; }
+.place-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.38rem 0.8rem 0.38rem 0.55rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--glass-strong);
+  border: 1px solid var(--edge-strong);
+  border-radius: 999px;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: transform 220ms var(--ease-spring), box-shadow 200ms ease, background-color 160ms ease;
+}
+.place-chip:hover { background: #fff; transform: translateY(-1px); box-shadow: var(--shadow-raised); }
+.place-chip:active { transform: scale(0.96); }
+.place-chip.unset { color: var(--muted); font-weight: 600; border-style: dashed; background: transparent; box-shadow: none; }
+.place-chip svg, .icon-link svg, .saved-list svg, .ac-item svg {
+  width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none;
+}
+.place-chip.home svg { color: var(--sign-green); }
+.place-chip.work svg { color: var(--sign-blue); }
+.place-chip.favorite svg { color: #d4a200; }
+.place-chip .chip-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-link { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+.saved-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.saved-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.7rem; padding: 0.45rem 0.3rem; border-bottom: 1px solid var(--edge); }
+.saved-list li:last-child { border-bottom: 0; }
+.saved-list .saved-text { display: grid; min-width: 0; }
+.saved-list .saved-text b { font-size: 0.9rem; }
+.saved-list .saved-text small { color: var(--muted); font-size: 0.76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.saved-list .saved-empty { color: var(--muted); font-size: 0.85rem; padding: 0.3rem; grid-template-columns: 1fr; }
+.saved-remove { font: inherit; font-size: 0.78rem; font-weight: 700; color: var(--muted); background: transparent; border: 0; padding: 0.3rem 0.5rem; border-radius: 999px; cursor: pointer; }
+.saved-remove:hover { color: #a61b1b; background: rgba(166, 27, 27, 0.08); }
+
+.place-dialog .settings-form { gap: var(--space-2); }
+.place-dialog label { margin-top: var(--space-2); }
+.place-kinds { margin: var(--space-2) 0 0; }
+.place-dialog .status { min-height: 1.2rem; }
+.ac-item.saved .ac-glyph { display: grid; place-items: center; }
+.ac-item.recent .ac-label { font-weight: 600; }

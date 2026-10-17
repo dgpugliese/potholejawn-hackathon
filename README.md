@@ -38,6 +38,7 @@ Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](h
 
 - The map opens on **every open pothole report in Philly right now**, plotted citywide and clickable.
 - Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data (Oct 2026): the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
+- Save **Home**, **Work**, and favourites: they appear as chips under the trip form, at the top of every search list, and recent trips are one tap away in the "Where to?" pill. Everything stays on your device.
 - Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?from=…&to=…&avoid=strong`).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
 - After a trip, open **"How this route was chosen"** to see every lookup behind the pick, or switch to **Ask 311 data** for an open-ended question ("where is the city slowest at fixing potholes?") answered from the city's live records.

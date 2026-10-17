@@ -234,6 +234,7 @@
   // Wire autocomplete to the pill and both trip inputs. The pill's geolocate
   // row and the picker both hand off to the existing pill -> panel flow.
   attachAutocomplete(pillInput, {
+    recents: true,
     geolocate: function () {
       requestLocation(
         function (coords) {
@@ -643,8 +644,12 @@
         return;
       }
       items.forEach(function (item, i) {
-        const row = el("div", "ac-item" + (i === active ? " active" : ""));
-        if (item.glyph) row.append(el("span", "ac-glyph", item.glyph));
+        const row = el("div", "ac-item" + (i === active ? " active" : "") + (item.cls ? " " + item.cls : ""));
+        if (item.icon) {
+          const glyph = el("span", "ac-glyph");
+          glyph.insertAdjacentHTML("afterbegin", item.icon); // our own static SVG markup
+          row.append(glyph);
+        } else if (item.glyph) row.append(el("span", "ac-glyph", item.glyph));
         const text = el("span", "ac-text");
         text.append(el("span", "ac-label", item.label));
         if (item.sub) text.append(el("span", "ac-sub", item.sub));
@@ -706,6 +711,7 @@
           pick: opts.geolocate,
         });
       }
+      list = list.concat(savedMatches(q, { recents: Boolean(opts.recents), choose: choose }));
       if (q) list = list.concat(localMatches(q));
       items = list;
       active = -1;
@@ -1012,6 +1018,7 @@
     briefing.append(el("span", "mode", "Based on open 311 reports from the last 12 months."));
     drawComparison();
     drawSteps();
+    recordRecent(form.start.value.trim(), form.end.value.trim());
     results.classList.add("fresh"); // cards cascade in once; route taps re-render silently
     clearTimeout(render.freshTimer);
     render.freshTimer = setTimeout(function () { results.classList.remove("fresh"); }, 900);
@@ -1832,6 +1839,212 @@
   if (new URLSearchParams(location.search).get("sim") === "1") {
     window.__pjNav = { feedPosition: onPosition, state: nav, start: startNavigation, stop: stopNavigation };
   }
+
+
+  // ---- Saved places and recents ----------------------------------------------
+  // Home, Work and starred favourites, plus the last few trips, kept on this
+  // device (localStorage). They surface as chips under the trip form, at the
+  // top of every search list, and in Settings for housekeeping.
+  const PLACES_KEY = "pj.places";
+  const RECENTS_KEY = "pj.recents";
+  const MAX_RECENTS = 6;
+  const PLACE_ICONS = {
+    home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>',
+    work: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/></svg>',
+    favorite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.9 6.4.8-4.7 4.5 1.2 6.4L12 17.5l-5.7 3.1 1.2-6.4L2.8 9.7l6.4-.8z"/></svg>',
+    recent: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    add: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  };
+
+  function readJson(key) {
+    try { const v = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(v) ? v : []; } catch (err) { return []; }
+  }
+  function writeJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) { /* private mode */ }
+  }
+  function loadPlaces() {
+    return readJson(PLACES_KEY).filter(function (p) {
+      return p && typeof p.address === "string" && p.address && /^(home|work|favorite)$/.test(p.kind);
+    });
+  }
+  function placeByKind(kind) { return loadPlaces().find((p) => p.kind === kind) || null; }
+  function cleanLabel(text) {
+    return String(text || "").replace(/,\s*(philadelphia|phila)\b.*$/i, "").trim().slice(0, 40);
+  }
+  function upsertPlace(place) {
+    let places = loadPlaces();
+    if (place.kind === "home" || place.kind === "work") places = places.filter((p) => p.kind !== place.kind);
+    else places = places.filter((p) => p.address.toLowerCase() !== place.address.toLowerCase());
+    places.push({ id: place.id || String(Date.now()), kind: place.kind, label: place.label, address: place.address, at: new Date().toISOString() });
+    writeJson(PLACES_KEY, places.slice(-30));
+    renderSavedRow();
+    renderSavedList();
+  }
+  function removePlace(id) {
+    writeJson(PLACES_KEY, loadPlaces().filter((p) => p.id !== id));
+    renderSavedRow();
+    renderSavedList();
+  }
+
+  // Which trip field a chip should fill: the one last touched, else "Going to".
+  let lastField = "end";
+  form.start.addEventListener("focus", function () { lastField = "start"; });
+  form.end.addEventListener("focus", function () { lastField = "end"; });
+
+  function fillFromPlace(place) {
+    const target = lastField === "start" ? form.start : form.end;
+    target.value = place.address;
+    openPanel();
+    expandTripForm();
+    const other = target === form.start ? form.end : form.start;
+    if (other.value.trim()) button.focus(); else other.focus();
+  }
+
+  function placeChip(kind, place) {
+    const chip = el("button", "place-chip " + kind + (place ? "" : " unset"));
+    chip.type = "button";
+    chip.insertAdjacentHTML("afterbegin", PLACE_ICONS[kind]); // our own static markup
+    const text = place ? place.label || (kind === "home" ? "Home" : kind === "work" ? "Work" : "Saved") : (kind === "home" ? "Set home" : "Set work");
+    chip.append(el("span", "chip-text", text));
+    chip.title = place ? place.address : "";
+    chip.addEventListener("click", function () {
+      if (place) fillFromPlace(place);
+      else openPlaceDialog({ kind: kind });
+    });
+    return chip;
+  }
+
+  function renderSavedRow() {
+    const row = document.getElementById("saved-row");
+    row.replaceChildren();
+    row.append(placeChip("home", placeByKind("home")), placeChip("work", placeByKind("work")));
+    loadPlaces().filter((p) => p.kind === "favorite").forEach(function (p) { row.append(placeChip("favorite", p)); });
+    const add = el("button", "place-chip unset");
+    add.type = "button";
+    add.insertAdjacentHTML("afterbegin", PLACE_ICONS.add);
+    add.append(el("span", "chip-text", "Add"));
+    add.setAttribute("aria-label", "Save a new place");
+    add.addEventListener("click", function () { openPlaceDialog({ kind: "favorite" }); });
+    row.append(add);
+  }
+
+  function renderSavedList() {
+    const list = document.getElementById("saved-list");
+    list.replaceChildren();
+    const places = loadPlaces();
+    if (!places.length) {
+      list.append(el("li", "saved-empty", "No saved places yet. Home and Work show up under the trip form."));
+      return;
+    }
+    places.forEach(function (p) {
+      const item = el("li");
+      const icon = el("span", "place-chip " + p.kind);
+      icon.style.padding = "0.3rem";
+      icon.insertAdjacentHTML("afterbegin", PLACE_ICONS[p.kind]);
+      const text = el("span", "saved-text");
+      text.append(el("b", "", p.label || (p.kind === "home" ? "Home" : p.kind === "work" ? "Work" : "Saved")), el("small", "", p.address));
+      const remove = el("button", "saved-remove", "Remove");
+      remove.type = "button";
+      remove.addEventListener("click", function () { removePlace(p.id); });
+      item.append(icon, text, remove);
+      list.append(item);
+    });
+  }
+
+  // Save-a-place dialog, with the same autocomplete as the trip form.
+  const placeDialog = document.getElementById("place-dialog");
+  const placeForm = document.getElementById("place-form");
+  const placeStatus = document.getElementById("place-status");
+  attachAutocomplete(placeForm.address, {
+    geolocate: function () {
+      requestLocation(
+        function (coords) { placeForm.address.value = coords; },
+        function (message) { placeStatus.textContent = message; }
+      );
+    },
+  });
+
+  function openPlaceDialog(prefill) {
+    prefill = prefill || {};
+    placeForm.reset();
+    placeStatus.textContent = "";
+    placeForm.kind.value = prefill.kind || "favorite";
+    placeForm.label.value = prefill.label || "";
+    placeForm.address.value = prefill.address || "";
+    document.getElementById("place-title").textContent = prefill.address ? "Save this place" : "Save a place";
+    if (typeof placeDialog.showModal === "function") placeDialog.showModal(); else placeDialog.setAttribute("open", "");
+    (placeForm.address.value ? placeForm.label : placeForm.address).focus();
+  }
+  function closePlaceDialog() {
+    if (placeDialog.open) placeDialog.close(); else placeDialog.removeAttribute("open");
+  }
+  document.getElementById("place-cancel").addEventListener("click", closePlaceDialog);
+  placeForm.addEventListener("submit", function (event) {
+    event.preventDefault();
+    const address = placeForm.address.value.trim();
+    if (!address) { placeStatus.textContent = "Enter an address or place."; return; }
+    const kind = placeForm.kind.value;
+    const label = cleanLabel(placeForm.label.value) || (kind === "favorite" ? cleanLabel(address) : "");
+    upsertPlace({ kind: kind, label: label, address: address });
+    closePlaceDialog();
+    setStatus("Saved " + (label || kind) + ".");
+    setTimeout(function () { if (statusEl.textContent.indexOf("Saved ") === 0) setStatus(""); }, 2500);
+  });
+  document.getElementById("saved-add").addEventListener("click", function () { openPlaceDialog({ kind: "favorite" }); });
+  document.getElementById("save-place").addEventListener("click", function () {
+    if (!trip) return;
+    openPlaceDialog({
+      kind: "favorite",
+      label: cleanLabel(form.end.value),
+      address: (trip.end && trip.end.source !== "device coordinates" && form.end.value.trim()) || (trip.end ? trip.end.lat.toFixed(5) + ", " + trip.end.lon.toFixed(5) : ""),
+    });
+  });
+
+  // Recents: the last few trips, newest first, offered in the "Where to?" pill.
+  function loadRecents() { return readJson(RECENTS_KEY).filter((r) => r && r.start && r.end); }
+  function recordRecent(start, end) {
+    const key = (start + "|" + end).toLowerCase();
+    const recents = loadRecents().filter((r) => (r.start + "|" + r.end).toLowerCase() !== key);
+    recents.unshift({ start: start, end: end, at: new Date().toISOString() });
+    writeJson(RECENTS_KEY, recents.slice(0, MAX_RECENTS));
+  }
+
+  // Suggestions for the autocomplete: saved places that match, then recents.
+  function savedMatches(q, opts) {
+    const needle = q.toLowerCase();
+    const items = [];
+    loadPlaces().forEach(function (p) {
+      const name = p.label || p.kind;
+      if (needle && name.toLowerCase().indexOf(needle) === -1 && p.address.toLowerCase().indexOf(needle) === -1) return;
+      items.push({
+        icon: PLACE_ICONS[p.kind], cls: "saved",
+        label: p.label || (p.kind === "home" ? "Home" : p.kind === "work" ? "Work" : "Saved"),
+        sub: p.address,
+        pick: function () { opts.choose(p.address); },
+      });
+    });
+    if (opts.recents && !needle) {
+      loadRecents().slice(0, 3).forEach(function (r) {
+        items.push({
+          icon: PLACE_ICONS.recent, cls: "recent",
+          label: cleanLabel(r.start) + " → " + cleanLabel(r.end),
+          sub: "Recent trip",
+          pick: function () {
+            form.start.value = r.start;
+            form.end.value = r.end;
+            openPanel();
+            expandTripForm();
+            if (form.requestSubmit) form.requestSubmit();
+            else form.dispatchEvent(new Event("submit", { cancelable: true }));
+          },
+        });
+      });
+    }
+    return items;
+  }
+
+  renderSavedRow();
+  renderSavedList();
 
   // A shared link (?from=&to=&avoid=) plans the trip as soon as the page loads.
   (function runFromUrl() {
