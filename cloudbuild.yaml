@@ -52,8 +52,8 @@ steps:
       - --max-instances=3
       - --cpu-boost
       - --clear-secrets
-      - --clear-env-vars
-      - --set-env-vars=PRELOAD_GRAPH=1
+      - --remove-env-vars=ANTHROPIC_API_KEY,RATE_MAX_PER_IP,RATE_WINDOW_SECONDS,RATE_MAX_PER_HOUR,RATE_MAX_CONCURRENT
+      - --update-env-vars=PRELOAD_GRAPH=1
       - --labels=app=potholejawn,managed-by=cloudbuild
 
 images:
