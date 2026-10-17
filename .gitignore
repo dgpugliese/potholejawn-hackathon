@@ -5,3 +5,4 @@ __pycache__/
 venv/
 .pytest_cache/
 runs/*.jsonl
+data/philly_osm_raw.json

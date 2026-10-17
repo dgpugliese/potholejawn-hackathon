@@ -1,13 +1,14 @@
 # Cloud Build pipeline: test, build the image, push to Artifact Registry, and
 # roll it out to Cloud Run. Runs on every push to main once the trigger in
-# docs/deploy.md is connected, or by hand with:
-#   gcloud builds submit --config cloudbuild.yaml .
+# docs/deploy.md is connected (set _TAG=$SHORT_SHA on the trigger), or by hand:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_TAG=$(git rev-parse --short HEAD) .
 #
 # No secrets: the web app talks only to public data services.
 substitutions:
   _REGION: us-east4
   _SERVICE: potholejawn
   _REPO: cloud-run-source-deploy
+  _TAG: manual
 
 steps:
   - id: test
@@ -23,7 +24,7 @@ steps:
     args:
       - build
       - -t
-      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${_TAG}
       - -t
       - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
       - .
@@ -39,7 +40,7 @@ steps:
       - run
       - deploy
       - ${_SERVICE}
-      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${_TAG}
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
@@ -56,7 +57,7 @@ steps:
       - --labels=app=potholejawn,managed-by=cloudbuild
 
 images:
-  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:${_TAG}
   - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
 
 options:

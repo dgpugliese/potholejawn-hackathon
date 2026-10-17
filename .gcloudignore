@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+runs/
+docs/
+tests/
+__pycache__/
+*.pyc
+.pytest_cache/
+data/philly_osm_raw.json

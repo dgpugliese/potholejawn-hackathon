@@ -41,7 +41,7 @@ it (`--clear-env-vars`). Revoke that key in the Anthropic console anyway.
 By hand, from a checkout (runs the tests first; a red test aborts the deploy):
 
 ```bash
-gcloud builds submit --config cloudbuild.yaml .
+gcloud builds submit --config cloudbuild.yaml --substitutions=_TAG=$(git rev-parse --short HEAD) .
 ```
 
 Continuous deployment on every push to `main`: connect the GitHub repo once in
@@ -52,7 +52,8 @@ gcloud builds triggers create github \
   --name=potholejawn-main \
   --repo-name=potholejawn-hackathon --repo-owner=dgpugliese \
   --branch-pattern='^main$' \
-  --build-config=cloudbuild.yaml
+  --build-config=cloudbuild.yaml \
+  --substitutions=_TAG='$SHORT_SHA'
 ```
 
 Verify a deploy:
