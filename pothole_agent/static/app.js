@@ -1244,17 +1244,26 @@
     if (nav.dest) L.marker([nav.dest.lat, nav.dest.lon], { icon: divIcon("endpoint-marker", 16), interactive: false }).addTo(nav.layer);
     if (!nav.puck) {
       nav.puck = L.marker(latlngs[0], {
-        icon: L.divIcon({ className: "", html: '<div class="nav-puck"></div>', iconSize: [26, 26], iconAnchor: [13, 13] }),
+        icon: L.divIcon({ className: "", html: puckHtml(), iconSize: [34, 48], iconAnchor: [17, 24] }),
         interactive: false, zIndexOffset: 1000,
       });
     }
+    nav.myReports.addTo(nav.layer);
     nav.puck.addTo(nav.layer);
   }
 
   function fmtDistance(m) {
+    if (settings.units === "metric") {
+      if (m < 1000) return Math.max(0, Math.round(m / 50) * 50) + " m";
+      return (m / 1000).toFixed(1) + " km";
+    }
     const feet = m * 3.28084;
     if (feet < 1000) return Math.max(0, Math.round(feet / 50) * 50) + " ft";
     return (m / 1609.344).toFixed(1) + " mi";
+  }
+
+  function spokenDistance(m) {
+    return fmtDistance(m).replace(/ mi$/, " miles").replace(/ ft$/, " feet").replace(/ km$/, " kilometers").replace(/ m$/, " meters");
   }
 
   function speak(text, key) {
@@ -1262,7 +1271,11 @@
     if (nav.muted || !("speechSynthesis" in window)) return;
     try {
       window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = settings.rate || 1;
+      const chosen = settings.voice && englishVoices().find(function (v) { return v.name === settings.voice; });
+      if (chosen) utterance.voice = chosen;
+      window.speechSynthesis.speak(utterance);
     } catch (err) { /* voice is a bonus, never a blocker */ }
   }
 
@@ -1283,9 +1296,12 @@
     const toGo = Math.max(0, step.along - along);
     if (idx !== nav.stepIdx) {
       nav.stepIdx = idx;
-      if (toGo > ANNOUNCE_NEAR_M) speak("In " + fmtDistance(toGo).replace(" mi", " miles").replace(" ft", " feet") + ", " + step.text, "start-" + idx);
+      if (toGo > ANNOUNCE_NEAR_M) speak("In " + spokenDistance(toGo) + ", " + step.text, "start-" + idx);
     }
-    if (toGo <= ANNOUNCE_NEAR_M) speak(step.text, "near-" + idx);
+    if (toGo <= ANNOUNCE_NEAR_M && !nav.spoken["near-" + idx]) {
+      speak(step.text, "near-" + idx);
+      if (navigator.vibrate) navigator.vibrate([80, 40, 80]); // a nudge at the wheel, like Waze
+    }
     navArrow.textContent = ARROWS[step.modifier] || ARROWS[""];
     navDistance.textContent = toGo < 15 ? "Now" : "In " + fmtDistance(toGo);
     navInstruction.textContent = step.text;
@@ -1297,20 +1313,28 @@
     const minutes = nav.total ? Math.max(1, Math.round((remaining / nav.total) * nav.route.minutes)) : 0;
     const eta = new Date(Date.now() + minutes * 60000);
     navEta.textContent = eta.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-    navRemaining.textContent = minutes + " min\u00a0\u00b7\u00a0" + (remaining / 1609.344).toFixed(1) + " mi" +
-      (nav.route.kind === "smooth" ? "\u00a0\u00b7\u00a0smooth route" : "");
+    navRemaining.textContent = minutes + " min \u2022 " + fmtDistance(remaining).replace(/^0 (ft|m)$/, "0 $1") +
+      (nav.route.kind === "smooth" ? " \u2022 smooth route" : "");
+    navProgress.style.width = (nav.total ? Math.min(100, (along / nav.total) * 100) : 0).toFixed(1) + "%";
 
     // Reported potholes just ahead get a heads-up, once each.
     nav.potholes.forEach(function (p) {
       if (p.announced || p.along < along - 5 || p.along > along + POTHOLE_AHEAD_M) return;
       p.announced = true;
-      showAlert("Reported pothole ahead\u00a0\u00b7\u00a0" + fmtDistance(Math.max(0, p.along - along)), "", 6000);
+      showAlert("Reported pothole ahead \u2022 " + fmtDistance(Math.max(0, p.along - along)), "", 6000);
       speak("Reported pothole ahead", "pothole-" + p.id);
     });
   }
 
-  function onPosition(lat, lon, heading) {
+  function onPosition(lat, lon, heading, speedMps) {
     if (!nav.active) return;
+    if (typeof speedMps === "number" && !isNaN(speedMps) && speedMps >= 0) updateSpeedo(speedMps);
+    else if (nav.lastFix && nav.lastFixAt) {
+      const a = toXY(nav.lastFix.lat, nav.lastFix.lon), b = toXY(lat, lon);
+      const dt = (Date.now() - nav.lastFixAt) / 1000;
+      if (dt > 0.2) updateSpeedo(0.6 * nav.speedMps + 0.4 * (Math.hypot(b.x - a.x, b.y - a.y) / dt));
+    }
+    nav.lastFixAt = Date.now();
     if (typeof heading === "number" && !isNaN(heading)) nav.heading = heading;
     else if (nav.lastFix) {
       const a = toXY(nav.lastFix.lat, nav.lastFix.lon), b = toXY(lat, lon);
@@ -1320,7 +1344,7 @@
     nav.puck.setLatLng([lat, lon]);
     const puckEl = nav.puck.getElement() && nav.puck.getElement().querySelector(".nav-puck");
     if (puckEl) puckEl.style.transform = "rotate(" + Math.round(nav.heading) + "deg)";
-    map.setView([lat, lon], Math.max(map.getZoom(), NAV_ZOOM), { animate: true, duration: 0.4 });
+    if (nav.following) map.setView([lat, lon], Math.max(map.getZoom(), NAV_ZOOM), { animate: true, duration: 0.4 });
 
     const toDest = toXY(nav.dest.lat, nav.dest.lon), here = toXY(lat, lon);
     if (Math.hypot(toDest.x - here.x, toDest.y - here.y) <= ARRIVE_M) { arrive(); return; }
@@ -1380,8 +1404,19 @@
     nav.active = true;
     nav.dest = { lat: trip.end.lat, lon: trip.end.lon };
     nav.muted = false;
-    document.getElementById("nav-mute").setAttribute("aria-pressed", "false");
+    setMuteLabel();
+    nav.following = true;
+    nav.limitMph = null;
+    nav.lastFixAt = 0;
+    navRecenter.hidden = true;
+    closeSheets();
+    loadMyReports();
+    updateSpeedo(0);
+    document.getElementById("speedo").querySelector("span").textContent = settings.units === "metric" ? "km/h" : "mph";
     document.body.classList.add("navigating");
+    applyNight();
+    nav.nightTimer = setInterval(applyNight, 60000);
+    nav.limitTimer = setInterval(pollRoad, 4000);
     closePanel();
     hideCitywide();
     layers.clearLayers();
@@ -1400,7 +1435,7 @@
       return;
     }
     nav.watchId = navigator.geolocation.watchPosition(
-      function (pos) { onPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.heading); },
+      function (pos) { onPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.heading, pos.coords.speed); },
       function () { showAlert("Waiting for a GPS fix… check location permission.", "error", 6000); },
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
     );
@@ -1413,8 +1448,12 @@
     if (nav.watchId !== null) { navigator.geolocation.clearWatch(nav.watchId); nav.watchId = null; }
     if (nav.wakeLock) { nav.wakeLock.release().catch(function () {}); nav.wakeLock = null; }
     if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    clearInterval(nav.limitTimer);
+    clearInterval(nav.nightTimer);
+    closeSheets();
+    navRecenter.hidden = true;
     navEl.hidden = true;
-    document.body.classList.remove("navigating");
+    document.body.classList.remove("navigating", "night");
     map.removeLayer(nav.layer);
     nav.layer.clearLayers();
     nav.puck = null;
@@ -1430,7 +1469,7 @@
       if (!nav.active || nav.rerouting) return;
       sim.along = Math.min(nav.total, sim.along + sim.speed * 0.5);
       const p = pointAlong(sim.along);
-      onPosition(p[0], p[1], null);
+      onPosition(p[0], p[1], null, sim.speed);
       if (sim.along >= nav.total) stopSim();
     }, 500);
     nav.sim = sim;
@@ -1453,18 +1492,308 @@
     return [last[1], last[0]];
   }
 
+
+  // ---- Settings: vehicle, voice, display ---------------------------------------
+  // Persisted in localStorage so the car you picked is the car you see next trip.
+  const SETTINGS_KEY = "pj.settings";
+  const DEFAULT_SETTINGS = { vehicle: "car", color: "#f5c518", voice: "", rate: 1, night: "auto", units: "us" };
+  const VEHICLE_COLORS = ["#f5c518", "#e8590c", "#c62828", "#1e88e5", "#2e7d32", "#f7f6f2", "#26282b", "#8e24aa"];
+  // Top-down silhouettes, nose up, body in currentColor so the colour swatch applies.
+  const GLASS = "#cfe8ff", DARK = "#1b1c1e";
+  const VEHICLES = {
+    car: { name: "Car", svg: '<rect x="4" y="12" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="26" y="12" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="4" y="31" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="26" y="31" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="6" y="3" width="22" height="42" rx="8" fill="currentColor"/><path d="M9 16 q8 -5 16 0 v6 h-16z" fill="' + GLASS + '"/><path d="M9 36 q8 4 16 0 v-6 h-16z" fill="' + GLASS + '"/><rect x="10" y="22" width="14" height="8" rx="2" fill="rgba(0,0,0,0.12)"/>' },
+    suv: { name: "SUV", svg: '<rect x="3" y="11" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="26" y="11" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="3" y="31" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="26" y="31" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="5" y="2" width="24" height="44" rx="5" fill="currentColor"/><path d="M8 14 q9 -4 18 0 v7 h-18z" fill="' + GLASS + '"/><rect x="8" y="23" width="18" height="10" rx="2" fill="rgba(0,0,0,0.12)"/><path d="M8 40 q9 3 18 0 v-6 h-18z" fill="' + GLASS + '"/>' },
+    pickup: { name: "Pickup", svg: '<rect x="3" y="11" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="26" y="11" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="3" y="32" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="26" y="32" width="5" height="10" rx="1.5" fill="' + DARK + '"/><rect x="5" y="2" width="24" height="44" rx="4" fill="currentColor"/><path d="M8 13 q9 -4 18 0 v7 h-18z" fill="' + GLASS + '"/><rect x="8" y="24" width="18" height="19" rx="2" fill="rgba(0,0,0,0.35)" stroke="rgba(255,255,255,0.35)"/>' },
+    taxi: { name: "Taxi", svg: '<rect x="4" y="12" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="26" y="12" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="4" y="31" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="26" y="31" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="6" y="3" width="22" height="42" rx="8" fill="currentColor"/><path d="M9 16 q8 -5 16 0 v6 h-16z" fill="' + GLASS + '"/><path d="M9 36 q8 4 16 0 v-6 h-16z" fill="' + GLASS + '"/><rect x="11" y="23" width="12" height="5" rx="1" fill="' + DARK + '"/><rect x="13" y="24" width="2" height="3" fill="#fff"/><rect x="16" y="24" width="2" height="3" fill="#fff"/><rect x="19" y="24" width="2" height="3" fill="#fff"/>' },
+    bus: { name: "Bus", svg: '<rect x="3" y="9" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="27" y="9" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="3" y="34" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="27" y="34" width="4" height="9" rx="1.5" fill="' + DARK + '"/><rect x="5" y="1" width="24" height="46" rx="3" fill="currentColor"/><rect x="7" y="4" width="20" height="7" rx="1.5" fill="' + GLASS + '"/><rect x="7" y="13" width="20" height="26" rx="1.5" fill="rgba(0,0,0,0.15)"/><rect x="7" y="41" width="20" height="4" rx="1" fill="' + GLASS + '"/>' },
+    moto: { name: "Motorcycle", svg: '<rect x="14" y="2" width="6" height="12" rx="3" fill="' + DARK + '"/><rect x="14" y="34" width="6" height="12" rx="3" fill="' + DARK + '"/><rect x="4" y="11" width="26" height="3" rx="1.5" fill="' + DARK + '"/><rect x="11" y="12" width="12" height="24" rx="5" fill="currentColor"/><ellipse cx="17" cy="16" rx="4" ry="3" fill="' + GLASS + '"/><rect x="13" y="22" width="8" height="10" rx="3" fill="rgba(0,0,0,0.25)"/>' },
+    bike: { name: "Bicycle", svg: '<rect x="15" y="1" width="4" height="13" rx="2" fill="' + DARK + '"/><rect x="15" y="34" width="4" height="13" rx="2" fill="' + DARK + '"/><rect x="5" y="9" width="24" height="2.5" rx="1" fill="' + DARK + '"/><rect x="15.5" y="12" width="3" height="24" fill="currentColor"/><rect x="11" y="24" width="12" height="4" rx="2" fill="currentColor"/><ellipse cx="17" cy="21" rx="4.5" ry="3" fill="currentColor"/>' },
+  };
+  let settings = Object.assign({}, DEFAULT_SETTINGS);
+  try { settings = Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}")); } catch (err) { /* fresh defaults */ }
+  if (!VEHICLES[settings.vehicle]) settings.vehicle = "car";
+  if (VEHICLE_COLORS.indexOf(settings.color) === -1) settings.color = DEFAULT_SETTINGS.color;
+
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (err) { /* private mode */ }
+  }
+
+  function vehicleSvg(id, color) {
+    const v = VEHICLES[id] || VEHICLES.car;
+    return '<svg viewBox="0 0 34 48" aria-hidden="true" style="color:' + color + '">' + v.svg + "</svg>";
+  }
+
+  function puckHtml() {
+    return '<div class="nav-puck vehicle">' + vehicleSvg(settings.vehicle, settings.color) + "</div>";
+  }
+
+  const settingsDialog = document.getElementById("settings");
+  const vehicleGrid = document.getElementById("vehicle-grid");
+  const colorRow = document.getElementById("color-row");
+  const voiceSelect = document.getElementById("voice-select");
+  const voiceRate = document.getElementById("voice-rate");
+  const nightSelect = document.getElementById("night-select");
+  const unitsSelect = document.getElementById("units-select");
+
+  Object.keys(VEHICLES).forEach(function (id) {
+    const label = el("label", "vehicle-opt");
+    const input = document.createElement("input");
+    input.type = "radio"; input.name = "vehicle"; input.value = id; input.checked = id === settings.vehicle;
+    const face = el("span");
+    face.insertAdjacentHTML("afterbegin", vehicleSvg(id, settings.color)); // our own static markup, never API data
+    face.append(document.createTextNode(VEHICLES[id].name));
+    label.append(input, face);
+    input.addEventListener("change", function () { settings.vehicle = id; saveSettings(); applyVehicle(); });
+    vehicleGrid.append(label);
+  });
+  VEHICLE_COLORS.forEach(function (color) {
+    const label = el("label", "color-opt");
+    label.title = color;
+    const input = document.createElement("input");
+    input.type = "radio"; input.name = "color"; input.value = color; input.checked = color === settings.color;
+    const swatch = el("span"); swatch.style.background = color;
+    label.append(input, swatch);
+    input.addEventListener("change", function () { settings.color = color; saveSettings(); applyVehicle(); });
+    colorRow.append(label);
+  });
+
+  function applyVehicle() {
+    vehicleGrid.querySelectorAll("svg").forEach(function (svg) { svg.style.color = settings.color; });
+    if (nav.puck && nav.puck.getElement()) {
+      const wrap = nav.puck.getElement().querySelector(".nav-puck");
+      if (wrap) { wrap.innerHTML = vehicleSvg(settings.vehicle, settings.color); wrap.style.transform = "rotate(" + Math.round(nav.heading) + "deg)"; }
+    }
+  }
+
+  function englishVoices() {
+    if (!("speechSynthesis" in window)) return [];
+    return window.speechSynthesis.getVoices().filter(function (v) { return /^en/i.test(v.lang); });
+  }
+
+  function fillVoices() {
+    const voices = englishVoices();
+    voiceSelect.replaceChildren(el("option", "", "Default"));
+    voiceSelect.firstChild.value = "";
+    voices.forEach(function (v) {
+      const opt = el("option", "", v.name + " (" + v.lang + ")");
+      opt.value = v.name;
+      if (v.name === settings.voice) opt.selected = true;
+      voiceSelect.append(opt);
+    });
+  }
+  fillVoices();
+  if ("speechSynthesis" in window) window.speechSynthesis.addEventListener("voiceschanged", fillVoices);
+  voiceSelect.addEventListener("change", function () { settings.voice = voiceSelect.value; saveSettings(); });
+  voiceRate.value = settings.rate;
+  voiceRate.addEventListener("change", function () { settings.rate = parseFloat(voiceRate.value) || 1; saveSettings(); });
+  document.getElementById("voice-test").addEventListener("click", function () {
+    speak("In 500 feet, turn left onto North Broad Street. Reported pothole ahead.");
+  });
+  nightSelect.value = settings.night;
+  nightSelect.addEventListener("change", function () { settings.night = nightSelect.value; saveSettings(); applyNight(); });
+  unitsSelect.value = settings.units;
+  unitsSelect.addEventListener("change", function () {
+    settings.units = unitsSelect.value; saveSettings();
+    document.getElementById("speedo").querySelector("span").textContent = settings.units === "metric" ? "km/h" : "mph";
+    if (nav.active && nav.lastFix) updateBanner(snapToRoute(nav.lastFix.lat, nav.lastFix.lon).along);
+  });
+
+  function openSettings() {
+    fillVoices();
+    if (typeof settingsDialog.showModal === "function") settingsDialog.showModal();
+    else settingsDialog.setAttribute("open", "");
+  }
+  document.getElementById("settings-open").addEventListener("click", openSettings);
+  document.getElementById("nav-settings").addEventListener("click", function () { closeSheets(); openSettings(); });
+
+  function isNight() {
+    if (settings.night === "night") return true;
+    if (settings.night === "day") return false;
+    const hour = new Date().getHours();
+    return hour < 6 || hour >= 19;
+  }
+  function applyNight() { document.body.classList.toggle("night", nav.active && isNight()); }
+
+  // ---- Navigation extras: speedometer, follow mode, menus, alternatives --------
+  const speedoEl = document.getElementById("speedo");
+  const speedoValue = document.getElementById("speedo-value");
+  const speedoLimit = document.getElementById("speedo-limit");
+  const navMenu = document.getElementById("nav-menu");
+  const navAlts = document.getElementById("nav-alts");
+  const navRecenter = document.getElementById("nav-recenter");
+  const navProgress = document.getElementById("nav-progress").firstElementChild;
+  nav.following = true;
+  nav.speedMps = 0;
+  nav.limitMph = null;
+  nav.limitTimer = null;
+  nav.nightTimer = null;
+  nav.myReports = L.layerGroup();
+
+  function speedUnits(mps) { return settings.units === "metric" ? mps * 3.6 : mps * 2.23694; }
+
+  function updateSpeedo(mps) {
+    nav.speedMps = Math.max(0, mps || 0);
+    speedoValue.textContent = String(Math.round(speedUnits(nav.speedMps)));
+    const limit = nav.limitMph;
+    speedoLimit.hidden = limit === null;
+    if (limit !== null) {
+      speedoLimit.querySelector("b").textContent = settings.units === "metric" ? Math.round((limit * 1.609344) / 5) * 5 : limit;
+      speedoEl.classList.toggle("speeding", nav.speedMps * 2.23694 > limit + 4);
+    } else {
+      speedoEl.classList.remove("speeding");
+    }
+  }
+
+  function pollRoad() {
+    if (!nav.active || !nav.lastFix) return;
+    fetch("/api/road?at=" + nav.lastFix.lat.toFixed(6) + "," + nav.lastFix.lon.toFixed(6))
+      .then((r) => (r.ok ? r.json() : null))
+      .then(function (data) {
+        if (!nav.active || !data) return;
+        const road = data.road;
+        nav.limitMph = road && typeof road.posted_mph === "number" ? road.posted_mph : null;
+        updateSpeedo(nav.speedMps);
+      })
+      .catch(function () { /* keep the last known limit */ });
+  }
+
+  function closeSheets() {
+    navMenu.hidden = true;
+    navAlts.hidden = true;
+    document.getElementById("nav-menu-open").setAttribute("aria-expanded", "false");
+  }
+
+  document.getElementById("nav-menu-open").addEventListener("click", function () {
+    const open = navMenu.hidden;
+    closeSheets();
+    navMenu.hidden = !open;
+    this.setAttribute("aria-expanded", String(open));
+  });
+  document.getElementById("nav-menu-close").addEventListener("click", closeSheets);
+  document.getElementById("nav-alts-close").addEventListener("click", closeSheets);
+
+  navRecenter.addEventListener("click", function () {
+    nav.following = true;
+    navRecenter.hidden = true;
+    if (nav.lastFix) map.setView([nav.lastFix.lat, nav.lastFix.lon], NAV_ZOOM, { animate: true });
+  });
+  map.on("dragstart", function () {
+    if (!nav.active) return;
+    nav.following = false;
+    navRecenter.hidden = false;
+  });
+  document.getElementById("nav-overview").addEventListener("click", function () {
+    closeSheets();
+    nav.following = false;
+    navRecenter.hidden = false;
+    const latlngs = nav.route.coordinates.map((c) => [c[1], c[0]]);
+    map.fitBounds(L.latLngBounds(latlngs), { paddingTopLeft: [24, 120], paddingBottomRight: [24, 110] });
+  });
+
+  function toast(text) {
+    const node = el("div", "nav-toast", text);
+    navEl.append(node);
+    setTimeout(function () { node.remove(); }, 3500);
+  }
+
+  // "Report a pothole here": drops a pin at the current position and remembers it
+  // on this device. Philly 311 has no deep link with coordinates, so the pin is
+  // the driver's own note to file after the trip from the panel's 311 link.
+  document.getElementById("nav-report").addEventListener("click", function () {
+    closeSheets();
+    if (!nav.lastFix) return;
+    const report = { lat: nav.lastFix.lat, lon: nav.lastFix.lon, at: new Date().toISOString() };
+    let mine = [];
+    try { mine = JSON.parse(localStorage.getItem("pj.reports") || "[]"); } catch (err) { mine = []; }
+    mine.push(report);
+    try { localStorage.setItem("pj.reports", JSON.stringify(mine.slice(-50))); } catch (err) { /* private mode */ }
+    L.marker([report.lat, report.lon], { icon: divIcon("my-report-marker", 20), interactive: false }).addTo(nav.myReports);
+    toast("Pothole marked here. File it with Philly 311 after your drive.");
+    speak("Pothole marked");
+    if (navigator.vibrate) navigator.vibrate(40);
+  });
+
+  function loadMyReports() {
+    nav.myReports.clearLayers();
+    let mine = [];
+    try { mine = JSON.parse(localStorage.getItem("pj.reports") || "[]"); } catch (err) { mine = []; }
+    mine.forEach(function (r) {
+      if (typeof r.lat === "number" && typeof r.lon === "number") {
+        L.marker([r.lat, r.lon], { icon: divIcon("my-report-marker", 20), interactive: false }).addTo(nav.myReports);
+      }
+    });
+  }
+
+  function altLabelLetter(route) { return route.route_id || "?"; }
+
+  document.getElementById("nav-alts-open").addEventListener("click", function () {
+    closeSheets();
+    navAlts.hidden = false;
+    const list = document.getElementById("nav-alts-list");
+    const status = document.getElementById("nav-alts-status");
+    list.replaceChildren();
+    status.hidden = false;
+    status.textContent = "Comparing routes from your position…";
+    const from = nav.lastFix || { lat: nav.route.coordinates[0][1], lon: nav.route.coordinates[0][0] };
+    fetch("/api/navigate?alternatives=1&from=" + from.lat.toFixed(6) + "," + from.lon.toFixed(6) +
+          "&to=" + nav.dest.lat.toFixed(6) + "," + nav.dest.lon.toFixed(6))
+      .then((r) => r.json().then((data) => ({ ok: r.ok, data: data })))
+      .then(function (res) {
+        if (navAlts.hidden) return;
+        if (!res.ok || !res.data.routes || !res.data.routes.length) throw new Error(res.data.error || "No alternatives right now.");
+        status.hidden = true;
+        res.data.routes.forEach(function (route) {
+          const sign = el("button", "route-sign");
+          sign.type = "button";
+          if (route.kind === "smooth") sign.classList.add("recommended", "smooth");
+          if (nav.route && route.coordinates.length === nav.route.coordinates.length &&
+              route.coordinates[0][0] === nav.route.coordinates[0][0]) sign.classList.add("current");
+          const meta = el("span", "route-meta");
+          meta.append(el("strong", "", route.label), document.createTextNode(fmtMiles(route.miles) + ", about " + route.minutes + " min"));
+          const count = el("span", "route-count");
+          count.append(el("b", "", String(route.potholes.length)), document.createTextNode("reported"));
+          sign.append(el("span", "route-letter", altLabelLetter(route)), meta, count);
+          sign.addEventListener("click", function () {
+            closeSheets();
+            prepareNavRoute(route);
+            if (nav.sim) nav.sim.restartFrom(from.lat, from.lon);
+            nav.spoken = {};
+            speak("Switched to the " + route.label.toLowerCase());
+            toast("Now on the " + route.label.toLowerCase() + ": " + route.potholes.length + " reported pothole" + (route.potholes.length === 1 ? "" : "s"));
+            updateBanner(snapToRoute(from.lat, from.lon).along);
+          });
+          list.append(sign);
+        });
+      })
+      .catch(function (err) {
+        status.hidden = false;
+        status.textContent = String(err.message || err);
+      });
+  });
+
+  function fmtMiles(miles) {
+    return settings.units === "metric" ? (miles * 1.609344).toFixed(1) + " km" : miles + " mi";
+  }
+
   document.getElementById("nav-start").addEventListener("click", function () { startNavigation(false); });
   document.getElementById("nav-preview").addEventListener("click", function () { startNavigation(true); });
   document.getElementById("nav-exit").addEventListener("click", stopNavigation);
+  function setMuteLabel() {
+    const btn = document.getElementById("nav-mute");
+    btn.setAttribute("aria-pressed", String(nav.muted));
+    btn.textContent = nav.muted ? "\u{1F507} Unmute voice" : "\u{1F50A} Mute voice";
+  }
   document.getElementById("nav-mute").addEventListener("click", function () {
     nav.muted = !nav.muted;
-    this.setAttribute("aria-pressed", String(nav.muted));
-    this.textContent = nav.muted ? "\u{1F507}" : "\u{1F50A}";
-    this.setAttribute("aria-label", nav.muted ? "Unmute voice guidance" : "Mute voice guidance");
+    setMuteLabel();
+    closeSheets();
     if (nav.muted && "speechSynthesis" in window) window.speechSynthesis.cancel();
   });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && nav.active) stopNavigation();
+    if (event.key !== "Escape" || !nav.active) return;
+    if (!navMenu.hidden || !navAlts.hidden) { closeSheets(); return; }
+    if (settingsDialog.open) return;
+    stopNavigation();
   });
   // Test hook: ?sim=1 lets a script feed positions (used by the automated checks).
   if (new URLSearchParams(location.search).get("sim") === "1") {

@@ -16,7 +16,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from .agent import investigate
 from .routing import MAX_ADDRESS_CHARS, RoutingError, in_philadelphia, potholes_in_bbox
-from .smooth import graph_status, navigate, normalize_avoidance
+from .smooth import alternatives, graph_status, navigate, normalize_avoidance, road_at
 from .trip import plan_trip
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -203,12 +203,26 @@ def create_app() -> Flask:
             return jsonify({"error": "from and to must be lat,lon inside Philadelphia"}), 400
         avoidance = normalize_avoidance(request.args.get("avoid"))
         try:
+            if request.args.get("alternatives") == "1":
+                return jsonify({"routes": alternatives(*start, *end)})
             return jsonify(navigate(*start, *end, avoidance))
         except RoutingError as error:
             return jsonify({"error": str(error)}), 400
         except Exception:  # never leak internals to the browser
             app.logger.exception("re-route failed")
             return jsonify({"error": "Could not re-route right now. Keep following the road."}), 502
+
+    @app.get("/api/road")
+    def road_endpoint():
+        """Street name and posted speed limit at ?at=lat,lon, for the speedometer.
+
+        Answered from the in-memory street graph: no network, well under a
+        millisecond, so navigation can poll it every few seconds.
+        """
+        point = parse_point(request.args.get("at", ""))
+        if point is None:
+            return jsonify({"error": "at must be lat,lon inside Philadelphia"}), 400
+        return jsonify({"road": road_at(*point)})
 
     @app.post("/api/trip")
     def trip():

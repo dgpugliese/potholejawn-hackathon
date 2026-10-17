@@ -1293,3 +1293,215 @@ body.navigating .map-watermark { display: none !important; }
 }
 
 .action-link.primary { background: var(--warning); }
+
+/* ---- Navigation chrome: speedometer, menus, re-center, settings ------------- */
+.speedo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 52px;
+  margin-left: -0.4rem;
+  border-radius: 50%;
+  background: var(--asphalt);
+  color: #fff;
+  line-height: 1;
+}
+.speedo b { font-size: 1.25rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.speedo span { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85; }
+.speedo.speeding { background: #c62828; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(198, 40, 40, 0.25); } }
+/* US-style posted limit sign, tucked at the speedometer's shoulder. */
+.speed-limit {
+  position: absolute;
+  top: -14px;
+  right: -16px;
+  width: 30px;
+  padding: 2px 0 3px;
+  text-align: center;
+  color: var(--ink);
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  line-height: 1;
+  box-shadow: var(--shadow-card);
+}
+.speed-limit small { display: block; font-size: 0.42rem; font-weight: 800; letter-spacing: 0.02em; }
+.speed-limit b { display: block; font-size: 0.85rem; font-weight: 800; }
+
+.nav-progress {
+  pointer-events: none;
+  position: absolute;
+  left: 12px; right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + 66px);
+  max-width: 560px;
+  margin: 0 auto;
+  height: 4px;
+  background: rgba(27, 28, 30, 0.18);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.nav-progress span { display: block; height: 100%; width: 0; background: var(--sign-green); transition: width 400ms linear; }
+
+.nav-recenter {
+  pointer-events: auto;
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 92px);
+  transform: translateX(-50%);
+  font: inherit;
+  font-weight: 800;
+  padding: 0.55rem 1rem;
+  color: var(--ink);
+  background: var(--card-bg);
+  border: 2px solid var(--asphalt);
+  border-radius: 999px;
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+  animation: step-in 200ms ease both;
+}
+.nav-recenter::before { content: "\25CE "; }
+
+.nav-sheet {
+  pointer-events: auto;
+  position: absolute;
+  left: 12px; right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + 72px);
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--space-2);
+  background: var(--card-bg);
+  border: 1.5px solid var(--asphalt);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+  animation: step-in 160ms ease both;
+  max-height: 60vh;
+  overflow: auto;
+}
+.sheet-item {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.7rem 0.8rem;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.sheet-item:hover { background: rgba(255, 204, 0, 0.25); }
+.sheet-close { color: var(--muted); border-top: 1px solid var(--hairline); border-radius: 0; margin-top: var(--space-1); }
+.sheet-title { margin: var(--space-2) var(--space-2) 0; font-size: 1rem; }
+.sheet-status { margin: var(--space-1) var(--space-2) var(--space-2); font-size: 0.85rem; color: var(--muted); }
+.alt-list { display: grid; gap: var(--space-2); }
+.alt-list .route-sign { opacity: 1; }
+.alt-list .route-sign.current { outline: 3px solid var(--warning); outline-offset: 2px; }
+
+.gear-btn {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  font-size: 1.1rem;
+  width: 36px; height: 36px;
+  padding: 0;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.gear-btn:hover { background: rgba(38, 40, 43, 0.06); border-color: var(--hairline); }
+.masthead { grid-template-columns: auto 1fr auto; }
+
+/* Settings dialog */
+.settings {
+  width: min(520px, calc(100vw - 24px));
+  padding: 0;
+  border: 2px solid var(--asphalt);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float);
+  background: var(--lane);
+  color: var(--ink);
+}
+.settings::backdrop { background: rgba(27, 28, 30, 0.45); }
+.settings-form { padding: var(--space-4) var(--space-5) var(--space-5); display: grid; gap: var(--space-4); }
+.settings-form h2 { margin: 0; font-size: 1.2rem; }
+.settings-group { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--card-bg); display: grid; gap: var(--space-2); }
+.settings-group legend { font-weight: 700; font-size: 0.85rem; padding: 0 0.3rem; color: var(--asphalt-soft); }
+.settings-row { display: grid; grid-template-columns: 1fr 2fr; align-items: center; gap: var(--space-3); font-weight: 600; font-size: 0.85rem; margin: 0; }
+.settings-row select, .settings-row input[type="range"] { width: 100%; font: inherit; padding: 0.35rem 0.5rem; border: 1.5px solid var(--asphalt); border-radius: var(--radius-control); background: #fff; }
+.settings-actions { display: flex; justify-content: flex-end; }
+
+.vehicle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: var(--space-2); }
+.vehicle-opt { position: relative; margin: 0; }
+.vehicle-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.vehicle-opt span {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1.5px solid var(--hairline);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  background: var(--lane);
+}
+.vehicle-opt svg { width: 34px; height: 46px; }
+.vehicle-opt input:checked + span { border-color: var(--asphalt); background: var(--warning); }
+.vehicle-opt input:focus-visible + span { outline: 3px solid var(--sign-blue); outline-offset: 2px; }
+.color-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.color-opt { position: relative; margin: 0; }
+.color-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.color-opt span { display: block; width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(27, 28, 30, 0.3); cursor: pointer; }
+.color-opt input:checked + span { border-color: var(--ink); box-shadow: 0 0 0 3px var(--warning); }
+.color-opt input:focus-visible + span { outline: 3px solid var(--sign-blue); outline-offset: 2px; }
+
+/* The puck becomes the chosen vehicle, seen from above, nose pointing the way. */
+.nav-puck.vehicle {
+  width: 34px; height: 48px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  filter: drop-shadow(0 2px 3px rgba(27, 28, 30, 0.5));
+}
+.nav-puck.vehicle::after { display: none; }
+.nav-puck.vehicle svg { width: 100%; height: 100%; display: block; }
+
+/* Night map: invert the basemap tiles, keep overlays and chrome as they are. */
+body.night .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.95) saturate(0.6); }
+body.night .map-watermark { opacity: 0.08; }
+
+.nav-toast {
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 150px);
+  transform: translateX(-50%);
+  padding: 0.5rem 0.9rem;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  background: var(--asphalt);
+  border-radius: 999px;
+  box-shadow: var(--shadow-raised);
+  animation: step-in 200ms ease both;
+  max-width: calc(100vw - 24px);
+  text-align: center;
+}
+.my-report-marker {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--cone);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--cone);
+}
+
+@media (max-width: 420px) {
+  .nav-eta b { font-size: 1.05rem; }
+  .nav-eta span { font-size: 0.78rem; }
+}

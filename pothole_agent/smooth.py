@@ -197,6 +197,22 @@ def smooth_route(
     return _graph_route_to_route(plan, route_id)
 
 
+def _route_payload(route: Route, avoidance: str, label: str) -> dict[str, Any]:
+    return {
+        "route_id": route.route_id,
+        "kind": route.kind,
+        "label": label,
+        "source": route.source,
+        "miles": route.miles,
+        "minutes": route.minutes,
+        "coordinates": route.coordinates,
+        "steps": route.steps,
+        "via": route.via,
+        "potholes": route.potholes or [],
+        "avoidance": normalize_avoidance(avoidance),
+    }
+
+
 def navigate(
     start_lat: float,
     start_lon: float,
@@ -214,21 +230,51 @@ def navigate(
 
     try:
         route = smooth_route(start_lat, start_lon, end_lat, end_lon, avoidance)
+        label = "Smooth route"
     except GraphError:
         route = fetch_routes(start_lat, start_lon, end_lat, end_lon)[0]
+        label = "Fastest route"
     route.potholes = potholes_along(route)
-    return {
-        "route_id": route.route_id,
-        "kind": route.kind,
-        "source": route.source,
-        "miles": route.miles,
-        "minutes": route.minutes,
-        "coordinates": route.coordinates,
-        "steps": route.steps,
-        "via": route.via,
-        "potholes": route.potholes,
-        "avoidance": normalize_avoidance(avoidance),
-    }
+    return _route_payload(route, avoidance, label)
+
+
+def alternatives(
+    start_lat: float, start_lon: float, end_lat: float, end_lon: float
+) -> list[dict[str, Any]]:
+    """Every option from here: smooth (balanced), smooth (max avoidance), and
+    OSRM's fastest route with its alternatives, all scanned so the driver can
+    compare reports against minutes before switching mid-trip."""
+    from .routing import fetch_routes, potholes_along
+
+    found: list[tuple[Route, str, str]] = []
+    for level, route_id, label in (
+        ("balanced", "S", "Smooth route"),
+        ("strong", "M", "Max avoidance"),
+    ):
+        try:
+            route = smooth_route(start_lat, start_lon, end_lat, end_lon, level, route_id)
+        except GraphError:
+            continue
+        if any(r.coordinates == route.coordinates for r, _, _ in found):
+            continue  # same drive at both levels: list it once
+        found.append((route, level, label))
+    try:
+        fast = fetch_routes(start_lat, start_lon, end_lat, end_lon)
+    except Exception:  # noqa: BLE001 - OSRM down: the smooth options still stand
+        fast = []
+    for index, route in enumerate(fast[:2]):
+        found.append((route, "balanced", "Fastest route" if index == 0 else "Alternative"))
+    for route, _, _ in found:
+        route.potholes = potholes_along(route)
+    return [_route_payload(route, level, label) for route, level, label in found]
+
+
+def road_at(lat: float, lon: float) -> dict[str, Any] | None:
+    """Street name and posted limit under a position, from the graph (no network)."""
+    try:
+        return shared.graph().road_info(lat, lon)
+    except GraphError:
+        return None
 
 
 def score(route: Route, avoidance: str = DEFAULT_AVOIDANCE) -> float:

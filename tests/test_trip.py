@@ -338,3 +338,25 @@ def test_navigate_endpoint_validates_and_reroutes(monkeypatch):
     ok = client.get("/api/navigate?from=39.95,-75.16&to=39.9061,-75.1665&avoid=strong")
     assert ok.status_code == 200 and ok.get_json()["route_id"] == "S"
     assert calls == [(39.95, -75.16, 39.9061, -75.1665, "strong")]
+
+
+def test_road_endpoint_validates_and_answers(monkeypatch):
+    from pothole_agent import webapp
+
+    monkeypatch.setattr(
+        webapp, "road_at", lambda lat, lon: {"name": "North Broad Street", "posted_mph": 25}
+    )
+    client = create_app().test_client()
+    assert client.get("/api/road?at=junk").status_code == 400
+    assert client.get("/api/road?at=40.7128,-74.0060").status_code == 400
+    body = client.get("/api/road?at=39.95,-75.16").get_json()
+    assert body["road"]["posted_mph"] == 25
+
+
+def test_navigate_alternatives_flag(monkeypatch):
+    from pothole_agent import webapp
+
+    monkeypatch.setattr(webapp, "alternatives", lambda *_: [{"route_id": "S"}, {"route_id": "A"}])
+    client = create_app().test_client()
+    body = client.get("/api/navigate?from=39.95,-75.16&to=39.9061,-75.1665&alternatives=1")
+    assert [r["route_id"] for r in body.get_json()["routes"]] == ["S", "A"]

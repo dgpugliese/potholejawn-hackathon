@@ -380,6 +380,34 @@ class StreetGraph:
                             break
         return found
 
+    def nearest_edge(
+        self, lat: float, lon: float, radius_m: float = 40.0
+    ) -> tuple[int, float] | None:
+        """The closest street segment within radius_m, as (edge index, metres), or None."""
+        px, py = _project(lat, lon)
+        best: tuple[int, float] | None = None
+        for index in self.edges_near(lat, lon, radius_m):
+            points = [_project(a, b) for a, b in self.edge_points(index)]
+            for (ax, ay), (bx, by) in zip(points, points[1:], strict=False):
+                d = _point_segment_distance(px, py, ax, ay, bx, by)
+                if best is None or d < best[1]:
+                    best = (index, d)
+        return best
+
+    def road_info(self, lat: float, lon: float) -> dict[str, Any] | None:
+        """Street name, class, and posted limit (mph) at a point, for the speedometer."""
+        found = self.nearest_edge(lat, lon)
+        if found is None:
+            return None
+        edge = self.edges[found[0]]
+        tagged_kmh, highway = edge[3], edge[6]
+        return {
+            "name": edge[5] or highway.replace("_", " "),
+            "highway": highway,
+            "posted_mph": round(tagged_kmh / MPH_TO_KMH) if tagged_kmh else None,
+            "meters_away": round(found[1], 1),
+        }
+
     # ----- penalties -----
     @staticmethod
     def age_weight(days_open: float | None) -> float:

@@ -40,16 +40,80 @@
     </div>
     <div id="nav-next" class="nav-next" hidden></div>
     <div id="nav-alert" class="nav-alert" role="status" hidden></div>
+    <div id="nav-progress" class="nav-progress" aria-hidden="true"><span></span></div>
+    <button id="nav-recenter" class="nav-recenter" type="button" hidden>Re-center</button>
     <div class="nav-footer">
+      <div id="speedo" class="speedo" aria-label="Speed">
+        <b id="speedo-value">0</b><span>mph</span>
+        <div id="speedo-limit" class="speed-limit" hidden><small>LIMIT</small><b>25</b></div>
+      </div>
       <div class="nav-eta">
         <b id="nav-eta">&mdash;</b>
         <span id="nav-remaining">&mdash;</span>
       </div>
-      <button id="nav-mute" class="nav-btn" type="button" aria-pressed="false"
-              aria-label="Mute voice guidance">&#x1F50A;</button>
+      <button id="nav-menu-open" class="nav-btn" type="button" aria-label="More options"
+              aria-haspopup="true" aria-expanded="false">&#8943;</button>
       <button id="nav-exit" class="nav-btn nav-exit" type="button">End</button>
     </div>
+    <div id="nav-menu" class="nav-sheet" hidden role="menu">
+      <button type="button" class="sheet-item" id="nav-alts-open" role="menuitem">&#x1F500; Alternative routes</button>
+      <button type="button" class="sheet-item" id="nav-overview" role="menuitem">&#x1F5FA;&#xFE0F; Route overview</button>
+      <button type="button" class="sheet-item" id="nav-mute" role="menuitem" aria-pressed="false">&#x1F50A; Mute voice</button>
+      <button type="button" class="sheet-item" id="nav-report" role="menuitem">&#x26A0;&#xFE0F; Report a pothole here</button>
+      <button type="button" class="sheet-item" id="nav-settings" role="menuitem">&#x2699;&#xFE0F; Vehicle, voice &amp; display</button>
+      <button type="button" class="sheet-item sheet-close" id="nav-menu-close" role="menuitem">Close</button>
+    </div>
+    <div id="nav-alts" class="nav-sheet" hidden aria-label="Alternative routes">
+      <h2 class="sheet-title">Routes from here</h2>
+      <p id="nav-alts-status" class="sheet-status">Comparing routes from your position&hellip;</p>
+      <div id="nav-alts-list" class="alt-list"></div>
+      <button type="button" class="sheet-item sheet-close" id="nav-alts-close">Keep current route</button>
+    </div>
   </section>
+
+  <dialog id="settings" class="settings" aria-labelledby="settings-title">
+    <form method="dialog" class="settings-form">
+      <h2 id="settings-title">Vehicle, voice &amp; display</h2>
+
+      <fieldset class="settings-group">
+        <legend>Your vehicle on the map</legend>
+        <div id="vehicle-grid" class="vehicle-grid" role="radiogroup" aria-label="Vehicle icon"></div>
+        <div id="color-row" class="color-row" role="radiogroup" aria-label="Vehicle color"></div>
+      </fieldset>
+
+      <fieldset class="settings-group">
+        <legend>Voice guidance</legend>
+        <label class="settings-row" for="voice-select">Voice
+          <select id="voice-select"><option value="">Default</option></select>
+        </label>
+        <label class="settings-row" for="voice-rate">Speed
+          <input id="voice-rate" type="range" min="0.8" max="1.3" step="0.1" value="1">
+        </label>
+        <button type="button" id="voice-test" class="action-link">Test voice</button>
+      </fieldset>
+
+      <fieldset class="settings-group">
+        <legend>Display</legend>
+        <label class="settings-row" for="night-select">Night map
+          <select id="night-select">
+            <option value="auto">Automatic (sunset to sunrise)</option>
+            <option value="day">Always day</option>
+            <option value="night">Always night</option>
+          </select>
+        </label>
+        <label class="settings-row" for="units-select">Units
+          <select id="units-select">
+            <option value="us">Miles and feet</option>
+            <option value="metric">Kilometres and metres</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <div class="settings-actions">
+        <button type="submit" class="action-link primary">Done</button>
+      </div>
+    </form>
+  </dialog>
 
   <button id="panel-tab" class="panel-tab" type="button" aria-label="Open trip panel">
     <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
@@ -71,6 +135,8 @@
       <header class="masthead">
         <img src="/static/logo.png" alt="" class="logo" width="64" height="64">
         <h1 class="wordmark">pothole<span class="jawn">jawn</span></h1>
+        <button id="settings-open" class="gear-btn" type="button"
+                aria-label="Vehicle, voice and display settings">&#x2699;&#xFE0F;</button>
         <p class="tagline">Dodge the jawns. Pick the Philly route with fewer reported potholes.</p>
       </header>
 

@@ -265,3 +265,32 @@ def test_navigate_falls_back_to_osrm_when_graph_is_missing(monkeypatch):
     result = smooth_module.navigate(39.95, -75.16, 39.94, -75.15, "strong")
     assert result["route_id"] == "A" and result["potholes"] == []
     assert result["avoidance"] == "strong"
+
+
+def test_road_info_reports_name_and_posted_limit():
+    osm = grid_osm()
+    for way in osm["elements"]:
+        if way.get("id") == 101:
+            way["tags"]["maxspeed"] = "35 mph"
+    g = StreetGraph(compact_osm(osm))
+    on_row_1 = g.road_info(39.95 - STEP, -75.16 + STEP / 2)
+    assert on_row_1["name"] == "Row 1 St" and on_row_1["posted_mph"] == 35
+    on_row_0 = g.road_info(39.95, -75.16 + STEP / 2)
+    assert on_row_0["name"] == "Row 0 St" and on_row_0["posted_mph"] is None
+    assert g.road_info(39.95 + 0.05, -75.16) is None
+
+
+def test_alternatives_lists_distinct_options(smooth_env, monkeypatch):
+    from pothole_agent import smooth as smooth_module
+
+    monkeypatch.setattr(smooth_module, "fetch_route_via", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "pothole_agent.routing.fetch_routes",
+        lambda *_: [Route("A", 1.0, 3, [[0, 0], [1, 1]]), Route("B", 1.2, 4, [[0, 0], [2, 2]])],
+    )
+    monkeypatch.setattr("pothole_agent.routing.potholes_along", lambda route, buffer_m=30: [])
+    options = smooth_module.alternatives(39.95, -75.16, 39.95 - 2 * STEP, -75.16 + 2 * STEP)
+    labels = [o["label"] for o in options]
+    # No reports on the grid, so balanced and strong plan the same drive: listed once.
+    assert labels == ["Smooth route", "Fastest route", "Alternative"]
+    assert options[0]["kind"] == "smooth" and options[1]["route_id"] == "A"

@@ -23,8 +23,10 @@ every open 311 pothole report as a time penalty**, verifies each route against
 the city's live data, and recommends one. An AI agent runs the tools and writes
 the briefing; a plain-Python planner produces the same result when it cannot.
 Then tap **Start navigation**: the map follows your position with a maneuver
-banner, voice guidance, a heads-up for every reported pothole ahead, and an
-automatic smooth re-route when you leave the route. Every route also has
+banner, voice guidance, a speedometer with the posted limit, a heads-up for
+every reported pothole ahead, alternative routes from wherever you are, and an
+automatic smooth re-route when you leave the route. Pick your car and its
+colour, your voice, miles or kilometres, and a night map. Every route also has
 turn-by-turn directions and a one-tap hand-off to Google Maps that carries the
 smooth route's waypoints.
 
@@ -137,6 +139,22 @@ router from the current position (no model call, about a second) and the new
 route takes over without leaving navigation. The screen stays awake via the
 Wake Lock API where supported. "Preview drive" replays the route through the
 same code path, which is how the flow is tested without a car.
+
+Navigation chrome, in the spirit of Google Maps and Waze:
+
+- **Speedometer** from GPS speed, with the **posted limit** read from the
+  street graph's OpenStreetMap `maxspeed` tags via `/api/road` (polled every
+  few seconds, answered from memory). The dial turns red when you are over.
+- **Alternative routes from here**: the menu asks `/api/navigate?alternatives=1`
+  for the smooth route, the max-avoidance route, and OSRM's fastest route and
+  alternative from your current position, each scanned, and switches on tap.
+- **Your vehicle**: seven top-down icons (car, SUV, pickup, taxi, bus,
+  motorcycle, bicycle) in eight colours, remembered on the device.
+- **Voice**: any English voice the device offers, with a speed slider and a
+  test button; haptic nudges before each turn on phones that vibrate.
+- **Night map** from sunset to sunrise (or forced), re-center after panning,
+  route overview, a trip progress bar, and **Report a pothole here**, which
+  drops a pin at your position to file with 311 after the drive.
 
 The analyst agent (`pothole_agent/agent.py`, `tools.py`) uses `get_schema`,
 `list_categories`, and `run_sql`. When a query fails, the error goes back to the
