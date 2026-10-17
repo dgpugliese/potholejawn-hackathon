@@ -2020,3 +2020,8 @@ input[type="text"] { padding: 0.62rem 0.9rem 0.78rem; }
 .from-pill.custom .from-change { color: var(--muted); }
 #start-wrap { display: grid; gap: var(--space-1); margin-top: var(--space-2); animation: item-in 320ms var(--ease-out) both; }
 #start-wrap .geo-btn { top: auto; bottom: 10px; transform: none; }
+
+/* Settings gear: centre the icon in its circle (block SVG inside a button
+   otherwise sits top-left). */
+.gear-btn { display: inline-grid; place-items: center; line-height: 0; }
+.gear-btn svg { margin: 0; }
