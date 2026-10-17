@@ -1989,3 +1989,14 @@ input:focus-visible, button:focus-visible, summary:focus-visible, .route-sign:fo
   #results.fresh .route-sign, #results.fresh .comparison, #results.fresh .briefing, #results.fresh .actions, #results.fresh details,
   .settings[open], .settings[open]::backdrop { animation-duration: 1ms !important; animation-delay: 0ms !important; }
 }
+
+/* The "Then ..." pill is centred with auto margins rather than a transform, so
+   its entrance animation (which owns `transform`) cannot knock it off-centre. */
+.nav-next {
+  left: 12px;
+  right: 12px;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 24px));
+  margin: 0 auto;
+  transform: none;
+}
