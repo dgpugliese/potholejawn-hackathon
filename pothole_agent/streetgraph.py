@@ -59,7 +59,7 @@ HIGHWAY_SPEEDS_KMH = {
 FREE_FLOW = {"motorway", "motorway_link", "trunk", "trunk_link"}
 STRAIGHT_SECONDS = 3.0
 TURN_SECONDS = 12.0
-MAX_SPEED_MPS = 32.0  # ~70 mph; the A* heuristic must never beat the real cost
+MAX_SPEED_MPS = 37.0  # above any posted limit (130 km/h cap), so the A* heuristic stays admissible
 MPH_TO_KMH = 1.609344
 
 # Pothole matching and penalties.
