@@ -14,18 +14,11 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 
-from .agent import investigate
 from .routing import MAX_ADDRESS_CHARS, RoutingError, in_philadelphia, potholes_in_bbox
 from .smooth import alternatives, graph_status, navigate, normalize_avoidance, road_at
 from .trip import plan_trip
 
 STATIC_DIR = Path(__file__).parent / "static"
-MAX_QUESTION_CHARS = 500
-RUN_DIR = "runs"
-NO_KEY_MESSAGE = (
-    "Questions need an API key. Set ANTHROPIC_API_KEY and restart the server "
-    "to enable them. Trip planning still works without it."
-)
 
 # Rate limits for the agent endpoints (they spend API tokens per request).
 # Overridable via env vars; localhost is always exempt for local demos/tests.
@@ -71,14 +64,6 @@ class _RateLimiter:
             return
         with self._lock:
             self._active = max(0, self._active - 1)
-
-
-def _analyst_client():
-    """Model client for the analyst; None means 'let the SDK build one'.
-
-    Exists so tests can monkeypatch in a fake client without an API key.
-    """
-    return
 
 
 def create_app() -> Flask:
@@ -312,67 +297,6 @@ def create_app() -> Flask:
                 events.put(None)  # sentinel: stream is done
 
         threading.Thread(target=worker, daemon=True).start()
-
-        def generate():
-            while True:
-                item = events.get()
-                if item is None:
-                    return
-                kind, payload = item
-                yield f"event: {kind}\ndata: {json.dumps(payload, default=str)}\n\n"
-
-        return Response(
-            generate(),
-            mimetype="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
-
-    @app.get("/api/ask/stream")
-    def ask_stream():
-        """Run the 311 analyst agent on an open question, streamed as SSE.
-
-        Mirrors /api/trip/stream: `step` events while the agent works, then one
-        `result` event with the answer, or one `ask_error`. Every SQL query the
-        model writes goes through validate_sql inside tools.run_sql.
-        """
-        question = request.args.get("q", "")
-        if not isinstance(question, str) or not question.strip():
-            return jsonify({"error": "Type a question first."}), 400
-        if len(question) > MAX_QUESTION_CHARS:
-            return jsonify({"error": "That question is too long."}), 400
-
-        client = _analyst_client()
-        events: queue.Queue = queue.Queue()
-
-        if client is None and not os.environ.get("ANTHROPIC_API_KEY"):
-            # The analyst has no fallback planner, so fail fast and friendly.
-            events.put(("ask_error", {"error": NO_KEY_MESSAGE}))
-            events.put(None)
-        else:
-            ip = client_ip()
-            if not limiter.try_acquire(ip):
-                return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
-
-            def worker() -> None:
-                try:
-                    answer = investigate(
-                        question,
-                        client=client,
-                        on_event=lambda e: events.put(("step", e)),
-                        run_dir=RUN_DIR,
-                        plain_text=True,
-                    )
-                    events.put(("result", {"answer": answer}))
-                except Exception:  # never leak internals to the browser
-                    app.logger.exception("analyst question failed")
-                    events.put(
-                        ("ask_error", {"error": "Could not answer that right now. Try again."})
-                    )
-                finally:
-                    limiter.release(ip)
-                    events.put(None)  # sentinel: stream is done
-
-            threading.Thread(target=worker, daemon=True).start()
 
         def generate():
             while True:

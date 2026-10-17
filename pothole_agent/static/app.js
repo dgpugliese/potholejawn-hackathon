@@ -389,33 +389,6 @@
     }
   });
 
-  // ---- Trip / Ask mode switch ------------------------------------------------
-  // One panel, one segmented control — "Ask 311 data" is a mode of the same
-  // tool rather than a second, visually separate app stacked underneath.
-  const modeTabs = [document.getElementById("tab-trip"), document.getElementById("tab-ask")];
-  const modePanels = { "tab-trip": document.getElementById("mode-trip"), "tab-ask": document.getElementById("mode-ask") };
-
-  function setMode(tab) {
-    modeTabs.forEach(function (t) {
-      const active = t === tab;
-      t.setAttribute("aria-selected", String(active));
-      t.tabIndex = active ? 0 : -1;
-      modePanels[t.id].hidden = !active;
-    });
-    tab.focus();
-    updatePeekSummary(); // the peek strip is trip-only; hide it on the Ask tab
-  }
-
-  modeTabs.forEach(function (tab, i) {
-    tab.addEventListener("click", function () { setMode(tab); });
-    tab.addEventListener("keydown", function (event) {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      const next = modeTabs[(i + (event.key === "ArrowRight" ? 1 : modeTabs.length - 1)) % modeTabs.length];
-      setMode(next);
-    });
-  });
-
   let trip = null;
   let activeId = null;
   let markersById = {};
@@ -456,10 +429,7 @@
 
   function updatePeekSummary() {
     const route = trip && trip.routes.find(function (r) { return r.route_id === activeId; });
-    // No trip-branded strip while the Ask tab is active: its click handler
-    // opens the sheet onto whichever panel is showing, not the trip.
-    const askActive = document.getElementById("tab-ask").getAttribute("aria-selected") === "true";
-    if (!route || askActive) { peekSummary.hidden = true; return; }
+    if (!route) { peekSummary.hidden = true; return; }
     peekChip.textContent = route.route_id;
     peekChip.classList.toggle("recommended", route.route_id === trip.recommended);
     const n = route.potholes.length;
@@ -1099,71 +1069,6 @@
       tripFailed("Could not plan the trip. Check the addresses and try again.");
     };
   });
-
-  // Follow-up question box: open questions answered from the city's 311 data.
-  const askForm = document.getElementById("ask-form");
-  const askButton = document.getElementById("ask-go");
-  const askStatusEl = document.getElementById("ask-status");
-  const answerEl = document.getElementById("answer");
-
-  function setAskStatus(message, isError) {
-    askStatusEl.textContent = message;
-    askStatusEl.classList.toggle("error", Boolean(isError));
-    askStatusEl.classList.toggle("busy", Boolean(message) && !isError);
-  }
-
-  // Example-question chips: fill the box and ask right away.
-  document.querySelectorAll(".ask-chip").forEach(function (chip) {
-    chip.addEventListener("click", function () {
-      if (askButton.disabled) return; // one question at a time
-      askForm.question.value = chip.textContent;
-      if (askForm.requestSubmit) askForm.requestSubmit();
-      else askForm.dispatchEvent(new Event("submit", { cancelable: true }));
-    });
-  });
-
-  askForm.addEventListener("submit", function (event) {
-    event.preventDefault();
-    const question = askForm.question.value.trim();
-    if (!question) { setAskStatus("Type a question first.", true); return; }
-    askButton.disabled = true;
-    setAskStatus("Checking the city's 311 data.");
-    answerEl.hidden = true;
-    const askLive = document.getElementById("ask-live");
-    const askSteps = document.getElementById("ask-live-steps");
-    askSteps.replaceChildren();
-    askLive.hidden = false;
-
-    const source = new EventSource("/api/ask/stream?q=" + encodeURIComponent(question));
-    function finish() {
-      source.close();
-      askLive.hidden = true;
-      askButton.disabled = false;
-    }
-    source.addEventListener("step", function (e) {
-      const step = JSON.parse(e.data);
-      const text = describeStep(step);
-      if (text) {
-        askSteps.append(el("li", step.type === "tool_error" ? "error" : "", text));
-        askSteps.lastChild.scrollIntoView({ block: "nearest" });
-      }
-    });
-    source.addEventListener("result", function (e) {
-      finish();
-      setAskStatus("");
-      answerEl.textContent = JSON.parse(e.data).answer; // textContent only, never innerHTML
-      answerEl.hidden = false;
-    });
-    source.addEventListener("ask_error", function (e) {
-      finish();
-      setAskStatus(JSON.parse(e.data).error || "Something went wrong.", true);
-    });
-    source.onerror = function () { // connection-level failure (e.g. bad input, server down)
-      finish();
-      setAskStatus("Could not get an answer right now. Try again.", true);
-    };
-  });
-
 
   // ---- Live navigation --------------------------------------------------------
   // Follows the device's position along the active route like Google Maps or

@@ -185,21 +185,12 @@
       <header class="masthead">
         <img src="/static/logo.png" alt="" class="logo" width="64" height="64">
         <h1 class="wordmark">pothole<span class="jawn">jawn</span></h1>
+        <button id="settings-open" class="gear-btn" type="button"
+                aria-label="Vehicle, voice and display settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6H3M21 12H3M21 18H3"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></button>
         <p class="tagline">Dodge the jawns. Pick the Philly route with fewer reported potholes.</p>
       </header>
 
-      <div class="toolbar">
-        <div class="mode-switch" role="tablist" aria-label="Choose a tool">
-          <button type="button" id="tab-trip" class="mode-tab" role="tab"
-                  aria-selected="true" aria-controls="mode-trip">Plan a trip</button>
-          <button type="button" id="tab-ask" class="mode-tab" role="tab"
-                  aria-selected="false" aria-controls="mode-ask" tabindex="-1">Ask 311 data</button>
-        </div>
-        <button id="settings-open" class="gear-btn" type="button"
-                aria-label="Vehicle, voice and display settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6H3M21 12H3M21 18H3"/><circle cx="8" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></button>
-      </div>
-
-      <section id="mode-trip" class="mode-panel" role="tabpanel" aria-labelledby="tab-trip">
+      <section id="mode-trip" class="mode-panel" aria-label="Plan a trip">
         <button type="button" id="trip-summary" class="trip-summary" hidden
                 aria-label="Edit the trip">
           <span id="trip-summary-text" class="trip-summary-text"></span>
@@ -274,28 +265,6 @@
           12 months, from Philadelphia 311. They are not verified and some may be patched
           already. The smooth route treats every open report as a time penalty on its
           street; it is a plan, not a guarantee. Plan before you drive, not while driving.</p>
-      </section>
-
-      <section id="mode-ask" class="mode-panel" role="tabpanel" aria-labelledby="tab-ask" hidden>
-        <p class="ask-explainer">Ask anything about Philadelphia's 311 service requests.
-          Answers come straight from the city's live data, with the queries shown.</p>
-        <div class="ask-chips" role="group" aria-label="Example questions">
-          <button type="button" class="ask-chip">Which zips wait longest for pothole repairs?</button>
-          <button type="button" class="ask-chip">Illegal dumping vs potholes: which gets fixed faster?</button>
-          <button type="button" class="ask-chip">Which street has the most open pothole reports?</button>
-        </div>
-        <form id="ask-form" autocomplete="off">
-          <label for="question">A question about Philly 311 data</label>
-          <input id="question" name="question" type="text" maxlength="500" required
-                 placeholder="How long do potholes in 19143 take to get fixed?">
-          <button id="ask-go" type="submit">Ask</button>
-        </form>
-        <p id="ask-status" class="status" role="status" aria-live="polite"></p>
-        <section id="ask-live" hidden aria-live="polite">
-          <h2 class="live-title">Checking the city's data</h2>
-          <ol id="ask-live-steps"></ol>
-        </section>
-        <div id="answer" class="briefing" hidden></div>
       </section>
 
       <footer>

@@ -9,7 +9,8 @@ potholejawn: a Waze-style map that routes around potholes. User enters start and
 destination in Philly; the app fetches OSRM's fastest routes, plans its own
 pothole-aware route on a street graph with live 311 reports as penalties, verifies
 every route against the city's data, and recommends one. See README.md.
-- `agent.py`       generic tool loop (`run_agent`) plus the 311 analyst (`investigate`)
+- `agent.py`       generic tool loop (`run_agent`) plus the 311 analyst (`investigate`),
+                   which is CLI-only since Oct 2026 (the Ask tab was removed from the UI)
 - `trip.py`        trip agent, its tools (TripContext), and the no-LLM fallback planner
 - `routing.py`     geocoders, OSRM (routes, via-snap, directions), PostGIS queries
                    (SQL built from numbers only)

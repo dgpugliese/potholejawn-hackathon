@@ -239,46 +239,6 @@ h1 {
   line-height: 1.4;
 }
 
-/* ---- Segmented mode switch: unifies "plan a trip" and "ask 311 data" ------- */
-.mode-switch {
-  display: flex;
-  gap: 3px;
-  margin-top: var(--space-4);
-  padding: 3px;
-  background: rgba(38, 40, 43, 0.06);
-  border: 1.5px solid var(--asphalt);
-  border-radius: 999px;
-}
-
-.mode-tab {
-  flex: 1;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding: 0.62rem 0.5rem;
-  color: var(--asphalt-soft);
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
-}
-
-.mode-tab:hover { color: var(--ink); }
-
-.mode-tab[aria-selected="true"] {
-  color: var(--ink);
-  background: var(--warning);
-  box-shadow: 0 1px 0 var(--asphalt);
-}
-
-.mode-panel {
-  margin-top: var(--space-4);
-  animation: mode-in 180ms ease both;
-}
-
-@keyframes mode-in {
-  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -317,7 +277,7 @@ input[type="text"]:hover { border-color: var(--asphalt-soft); }
 
 input[type="text"]::placeholder { color: #9aa0a6; }
 
-button#go, button#ask-go {
+button#go {
   margin-top: var(--space-4);
   font: inherit;
   font-weight: 800;
@@ -333,19 +293,19 @@ button#go, button#ask-go {
   transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
 
-button#go:hover:not(:disabled), button#ask-go:hover:not(:disabled) {
+button#go:hover:not(:disabled) {
   filter: brightness(1.04);
   transform: translateY(-1px);
   box-shadow: 0 3px 0 var(--asphalt);
 }
 
-button#go:active:not(:disabled), button#ask-go:active:not(:disabled) {
+button#go:active:not(:disabled) {
   transform: translateY(1px);
   box-shadow: 0 1px 0 var(--asphalt);
   filter: brightness(0.97);
 }
 
-button#go:disabled, button#ask-go:disabled {
+button#go:disabled {
   opacity: 0.55;
   cursor: progress;
   transform: none;
@@ -578,7 +538,7 @@ details.list-disclosure[open] {
 
 details ol { margin: var(--space-2) 0 var(--space-3); }
 
-#live, #ask-live {
+#live {
   margin-top: var(--space-4);
   padding: var(--space-2) var(--space-4) var(--space-3);
   border: 1px solid var(--hairline);
@@ -587,69 +547,20 @@ details ol { margin: var(--space-2) 0 var(--space-3); }
   box-shadow: var(--shadow-card);
 }
 
-#steps, #live-steps, #ask-live-steps {
+#steps, #live-steps {
   padding-left: 1.4rem;
   font-size: 0.85rem;
   color: var(--asphalt-soft);
 }
 #steps { margin: var(--space-3) var(--space-4); }
-#steps li, #live-steps li, #ask-live-steps li { margin: 0.35rem 0; overflow-wrap: anywhere; }
-#live-steps li, #ask-live-steps li { animation: step-in 260ms ease both; }
-#steps li.error, #live-steps li.error, #ask-live-steps li.error { color: #a61b1b; }
+#steps li, #live-steps li li { margin: 0.35rem 0; overflow-wrap: anywhere; }
+#live-steps li li { animation: step-in 260ms ease both; }
+#steps li.error, #live-steps li.error li.error { color: #a61b1b; }
 
 @keyframes step-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-/* ---- Ask-the-analyst tab ---------------------------------------------------- */
-.ask-explainer {
-  margin: 0 0 var(--space-3);
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
-
-.ask-chips {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: var(--space-2);
-  margin: 0 calc(-1 * var(--space-5)) var(--space-2);
-  padding: 2px var(--space-5) 6px;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
-}
-.ask-chips::-webkit-scrollbar { display: none; }
-
-.ask-chip {
-  flex: none;
-  max-width: 100%;
-  white-space: nowrap;
-  scroll-snap-align: start;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 0.3rem 0.75rem;
-  color: var(--asphalt-soft);
-  background: var(--card-bg);
-  border: 1.5px solid var(--asphalt);
-  border-radius: 999px;
-  cursor: pointer;
-  box-shadow: 0 1px 0 var(--asphalt);
-  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease, color 120ms ease;
-}
-
-.ask-chip:hover {
-  background: var(--warning);
-  color: var(--ink);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 0 var(--asphalt);
-}
-
-.ask-chip:active { transform: translateY(1px); box-shadow: 0 0 0 var(--asphalt); }
 
 /* ---- Location autocomplete dropdown --------------------------------------- */
 .ac-list {
@@ -992,31 +903,12 @@ footer a:hover { color: var(--sign-green); }
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .mode-switch { margin-top: var(--space-3); }
 
   /* 16px inputs so iOS Safari never zooms the page on focus. */
   input[type="text"] { font-size: 1rem; }
 
   /* Thumb-sized touch targets throughout the sheet. */
   .geo-btn { min-width: 44px; min-height: 44px; }
-  .mode-tab { min-height: 44px; }
-
-  /* Analyst chips wrap into full-width tappable rows instead of a
-     horizontal scroller that hides two of the three examples. */
-  .ask-chips {
-    flex-wrap: wrap;
-    overflow-x: visible;
-    margin: 0 0 var(--space-2);
-    padding: 0;
-  }
-  .ask-chip {
-    flex: 1 1 100%;
-    white-space: normal;
-    text-align: left;
-    min-height: 44px;
-    padding: 0.55rem 0.85rem;
-    line-height: 1.35;
-  }
 
   /* Autocomplete dropdown never overflows a small viewport. */
   .ac-list { max-width: calc(100vw - 16px); max-height: 38vh; }
@@ -1132,15 +1024,15 @@ footer a:hover { color: var(--sign-green); }
      Smaller type, single-line rows, capped height with its own scroll (the
      existing scrollIntoView keeps it pinned to the newest step), so the map
      stays visible above the half sheet during a run. */
-  #live, #ask-live { padding: var(--space-2) var(--space-3); }
-  #live-steps, #ask-live-steps {
+  #live { padding: var(--space-2) var(--space-3); }
+  #live-steps {
     max-height: 24vh;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-left: 1.1rem;
     font-size: 0.78rem;
   }
-  #live-steps li, #ask-live-steps li {
+  #live-steps li li {
     margin: 0.14rem 0;
     white-space: nowrap;
     overflow: hidden;
@@ -1532,7 +1424,7 @@ body.night .map-watermark { opacity: 0.08; }
 /* Glass helper applied to every floating surface. */
 .search-pill, .panel, .citywide-badge, .ac-list, .nav-footer, .nav-sheet, .nav-recenter,
 .nav-next, .nav-toast, .settings, .leaflet-bar, .leaflet-popup-content-wrapper, .panel-tab,
-#live, #ask-live, details, .briefing, .comparison {
+#live, details, .briefing, .comparison {
   -webkit-backdrop-filter: var(--blur);
   backdrop-filter: var(--blur);
 }
@@ -1576,8 +1468,6 @@ input#pill-input { font-size: 1rem; }
   box-shadow: var(--shadow-float);
 }
 .panel-scroll { padding: var(--space-5) var(--space-5) var(--space-4); }
-.toolbar { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
-.toolbar .mode-switch { flex: 1; margin-top: 0; }
 .gear-btn {
   position: static;
   flex: none;
@@ -1598,15 +1488,13 @@ input#pill-input { font-size: 1rem; }
 .wordmark .jawn { box-shadow: none; border-radius: 6px; padding: 0 0.16em; }
 
 /* ---- Segmented controls (mode switch, avoidance) ---- */
-.mode-switch, .avoid-switch {
+.avoid-switch {
   padding: 3px;
   gap: 3px;
   background: rgba(27, 28, 30, 0.06);
   border: 1px solid var(--edge);
   border-radius: 999px;
 }
-.mode-tab { padding: 0.6rem 0.5rem; border-radius: 999px; }
-.mode-tab[aria-selected="true"] { background: #fff; color: var(--ink); box-shadow: var(--shadow-card), 0 0 0 1px var(--edge); }
 .avoid-label { font-weight: 600; font-size: 0.85rem; margin-top: var(--space-2); color: var(--asphalt-soft); }
 .avoid-switch { margin: 0 0 var(--space-1); display: grid; grid-template-columns: 1fr 1fr; min-width: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
@@ -1632,43 +1520,41 @@ input[type="text"]:focus-visible, .settings-row select:focus-visible, select:foc
 .geo-btn { right: 8px; border-radius: 50%; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; }
 
 /* ---- Primary buttons ---- */
-button#go, button#ask-go, .action-link.primary {
+button#go, .action-link.primary {
   border: 0;
   border-radius: 999px;
   background: linear-gradient(180deg, #ffd633, var(--warning));
   box-shadow: 0 6px 16px rgba(255, 204, 0, 0.35), inset 0 -1px 0 rgba(27, 28, 30, 0.18);
 }
-button#go, button#ask-go { padding: 0.85rem; }
-button#go:hover:not(:disabled), button#ask-go:hover:not(:disabled), .action-link.primary:hover {
+button#go { padding: 0.85rem; }
+button#go:hover:not(:disabled), .action-link.primary:hover {
   filter: none;
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(255, 204, 0, 0.42), inset 0 -1px 0 rgba(27, 28, 30, 0.18);
 }
-button#go:active:not(:disabled), button#ask-go:active:not(:disabled) {
+button#go:active:not(:disabled) {
   transform: translateY(0) scale(0.99);
   box-shadow: 0 3px 8px rgba(255, 204, 0, 0.3), inset 0 -1px 0 rgba(27, 28, 30, 0.18);
 }
-button#go:disabled, button#ask-go:disabled { box-shadow: none; }
+button#go:disabled { box-shadow: none; }
 
 /* ---- Pill links and chips ---- */
-.action-link, .ask-chip, .nav-btn, .alt-list .sheet-close {
+.action-link, .nav-btn, .alt-list .sheet-close {
   background: var(--glass-strong);
   border: 1px solid var(--edge-strong);
   box-shadow: var(--shadow-card);
   border-radius: 999px;
 }
 .action-link { padding: 0.5rem 0.9rem; }
-.action-link:hover, .ask-chip:hover {
+.action-link:hover:hover {
   background: #fff;
   color: var(--ink);
   transform: translateY(-1px);
   box-shadow: var(--shadow-raised);
 }
-.ask-chip:active { transform: translateY(0); box-shadow: var(--shadow-card); }
-.ask-chip { padding: 0.4rem 0.85rem; color: var(--ink); }
 
 /* ---- Cards ---- */
-.briefing, details, #live, #ask-live, .comparison {
+.briefing, details, #live, .comparison {
   background: var(--glass-strong);
   border: 1px solid var(--edge);
   border-radius: var(--radius-card);
@@ -1803,7 +1689,6 @@ input:focus-visible, button:focus-visible, summary:focus-visible, .route-sign:fo
     box-shadow: 0 -8px 24px rgba(27, 28, 30, 0.12), 0 -24px 56px rgba(27, 28, 30, 0.18);
   }
   .sheet-handle span { background: rgba(27, 28, 30, 0.22); width: 40px; height: 5px; }
-  .toolbar { margin-top: var(--space-2); }
   .gear-btn { width: 44px; height: 44px; }
   .search-pill { padding: 0.35rem 0.35rem 0.35rem 0.95rem; }
   #pill-go { width: 44px; height: 44px; }
@@ -2065,17 +1950,37 @@ input#pill-input:focus-visible { outline: none; box-shadow: none; }
 .place-chip svg { transform: translateY(1px); }
 .action-link { padding: 0.42rem 0.9rem 0.58rem; }
 .icon-link svg { transform: translateY(1px); }
-.mode-tab { padding: 0.52rem 0.5rem 0.68rem; }
 .avoid-option span { padding: 0.42rem 0.4rem 0.58rem; }
-button#go, button#ask-go { padding: 0.78rem 0.85rem 0.92rem; }
+button#go { padding: 0.78rem 0.85rem 0.92rem; }
 .nav-btn { padding-bottom: 2px; }
 .nav-exit { padding: 0 0.9rem 2px; }
 .sheet-close { padding: 0.58rem 0.65rem 0.72rem; }
 .sheet-close svg { transform: translateY(1px); }
-.ask-chip { padding: 0.33rem 0.85rem 0.47rem; }
 .trip-summary-edit { padding-bottom: 0.1rem; }
 .route-badge { vertical-align: 0.2em; }
 input[type="text"] { padding: 0.62rem 0.9rem 0.78rem; }
 .citywide-badge { padding: 0.32rem 0.8rem 0.48rem; }
 .nav-next { padding: 0.33rem 0.95rem 0.47rem; }
 .nav-alert, .nav-recenter, .nav-toast { padding-bottom: 0.65rem; }
+
+/* ---- Masthead with the settings gear; compact on mobile ---------------------- */
+.masthead { grid-template-columns: auto 1fr auto; }
+.masthead .gear-btn { grid-column: 3; grid-row: 1; align-self: center; }
+.masthead .tagline { grid-column: 1 / 4; }
+@media (max-width: 768px) {
+  .masthead {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0 0 var(--space-2);
+    padding: 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+    column-gap: var(--space-2);
+  }
+  .masthead .logo { width: 30px; }
+  .masthead h1 { font-size: 1.15rem; }
+  .masthead .tagline { display: none; }
+  .masthead .gear-btn { width: 40px; height: 40px; }
+}

@@ -41,7 +41,7 @@ Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](h
 - Save **Home**, **Work**, and favourites: they appear as chips under the trip form, at the top of every search list, and recent trips are one tap away in the "Where to?" pill. Everything stays on your device.
 - Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?from=…&to=…&avoid=strong`).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
-- After a trip, open **"How this route was chosen"** to see every lookup behind the pick, or switch to **Ask 311 data** for an open-ended question ("where is the city slowest at fixing potholes?") answered from the city's live records.
+- After a trip, open **"How this route was chosen"** to see every lookup behind the pick.
 
 ## Under the hood
 
@@ -58,10 +58,11 @@ time, and recommends one with a plain-language briefing. Agent steps stream to
 the panel live over Server-Sent Events, so you watch it think instead of
 staring at a spinner.
 
-**311 data questions** — the "Ask 311 data" tab answers open-ended questions by
-writing and running guarded SQL against the full 5.9M-row dataset, reading its
-own errors and retrying. Also available from the CLI. Both agents share one
-generic tool loop.
+**311 data questions (terminal only)** — `python -m pothole_agent.cli` answers
+open-ended questions by writing and running guarded SQL against the full
+5.9M-row dataset, reading its own errors and retrying. It shares the trip
+agent's tool loop and is kept as a developer and research tool; it is not part
+of the app's UI.
 
 **Map-first UI** — full-viewport map with a floating "Where to?" search pill, a
 slide-in results panel on desktop and a bottom sheet on mobile, a citywide layer
@@ -159,8 +160,7 @@ Navigation chrome, in the spirit of Google Maps and Waze:
 
 The analyst agent (`pothole_agent/agent.py`, `tools.py`) uses `get_schema`,
 `list_categories`, and `run_sql`. When a query fails, the error goes back to the
-model, which fixes the SQL and retries. The "Ask 311 data" tab streams its
-steps live and shows every SQL query it runs.
+model, which fixes the SQL and retries.
 
 ## Reliability and safety
 
