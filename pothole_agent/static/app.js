@@ -224,26 +224,78 @@
   pillForm.addEventListener("submit", function (event) {
     event.preventDefault();
     const q = pillInput.value.trim();
-    if (q) form.end.value = q;
     openPanel();
     expandTripForm(); // the form may still be collapsed from a previous trip
-    form.start.focus();
-    form.start.select();
+    if (!q) { form.end.focus(); return; }
+    form.end.value = q;
+    submitTrip(); // from your location, like Google Maps; "Change" picks another start
   });
+
+  function submitTrip() {
+    if (form.requestSubmit) form.requestSubmit();
+    else form.dispatchEvent(new Event("submit", { cancelable: true }));
+  }
+
+  // ---- Start point: "Your location" by default, a typed address on request ---
+  // Google Maps style: the first question is where you are going. The start
+  // is resolved from the device when the trip runs; "Change" reveals a field.
+  const fromToggle = document.getElementById("from-toggle");
+  const fromText = document.getElementById("from-text");
+  const startWrap = document.getElementById("start-wrap");
+  let startMode = "location";
+  let myLocation = null; // { coords: "lat, lon", at: ms } cached briefly
+  let lastField = "end"; // which field a saved-place chip fills
+
+  function setStartMode(mode) {
+    startMode = mode;
+    const custom = mode === "custom";
+    startWrap.hidden = !custom;
+    form.start.required = custom;
+    fromToggle.setAttribute("aria-expanded", String(custom));
+    fromToggle.classList.toggle("custom", custom);
+    fromText.textContent = custom ? (form.start.value.trim() || "Choose a starting point") : "Your location";
+    if (custom) { form.start.focus(); lastField = "start"; } else lastField = "end";
+  }
+  fromToggle.addEventListener("click", function () { setStartMode(startMode === "custom" ? "location" : "custom"); });
+  form.start.addEventListener("input", function () { fromText.textContent = form.start.value.trim() || "Choose a starting point"; });
+
+  function startLabel() { return startMode === "custom" ? form.start.value.trim() : "Your location"; }
+
+  function locate(onDone, onError) {
+    if (myLocation && Date.now() - myLocation.at < 60000) { onDone(myLocation.coords); return; }
+    requestLocation(function (coords) { myLocation = { coords: coords, at: Date.now() }; onDone(coords); }, onError);
+  }
+  // Warm the location permission the moment someone starts typing a destination.
+  form.end.addEventListener("focus", function () { if (startMode === "location" && !myLocation) locate(function () {}, function () {}); }, { once: true });
+
+  // Resolves to the string the planner should geocode as the start.
+  function resolveStart(onReady) {
+    if (startMode === "custom") {
+      const value = form.start.value.trim();
+      if (!value) { setStatus("Enter a starting point.", true); form.start.focus(); return; }
+      onReady(value);
+      return;
+    }
+    setStatus("Finding your location\u2026");
+    locate(onReady, function (message) {
+      setStartMode("custom");
+      setStatus(message + " Enter a starting point instead.", true);
+    });
+  }
 
   // Wire autocomplete to the pill and both trip inputs. The pill's geolocate
   // row and the picker both hand off to the existing pill -> panel flow.
   attachAutocomplete(pillInput, {
     recents: true,
     geolocate: function () {
-      requestLocation(
-        function (coords) {
-          form.start.value = coords;
+      // Confirms the default: trips start from the device's position.
+      setStartMode("location");
+      locate(
+        function () {
           const q = pillInput.value.trim();
-          if (q) form.end.value = q;
           openPanel();
-          expandTripForm(); // the form may still be collapsed from a previous trip
-          form.end.focus();
+          expandTripForm();
+          if (q) { form.end.value = q; submitTrip(); } else form.end.focus();
         },
         function (message) { openPanel(); setStatus(message, true); }
       );
@@ -254,12 +306,7 @@
     },
   });
   attachAutocomplete(form.start, {
-    geolocate: function () {
-      requestLocation(
-        function (coords) { form.start.value = coords; },
-        function (message) { setStatus(message, true); }
-      );
-    },
+    geolocate: function () { setStartMode("location"); },
   });
   attachAutocomplete(form.end, {});
 
@@ -280,12 +327,7 @@
     vv.addEventListener("scroll", liftPill);
   }
 
-  document.getElementById("use-location").addEventListener("click", function () {
-    requestLocation(
-      function (coords) { form.start.value = coords; },
-      function (message) { setStatus(message, true); }
-    );
-  });
+  document.getElementById("use-location").addEventListener("click", function () { setStartMode("location"); });
 
   panelTab.addEventListener("click", togglePanel);
 
@@ -399,7 +441,7 @@
 
   function collapseTripForm() {
     if (!mobileMq.matches) return;
-    tripSummaryText.textContent = form.start.value + " → " + form.end.value;
+    tripSummaryText.textContent = startLabel() + " → " + form.end.value;
     tripSummary.hidden = false;
     form.hidden = true;
   }
@@ -869,7 +911,7 @@
   // Shareable URLs: /?from=...&to=...&avoid=strong re-runs the same trip.
   function updateUrl(start, end, avoid) {
     const params = new URLSearchParams();
-    params.set("from", start);
+    if (start) params.set("from", start);
     params.set("to", end);
     if (avoid && avoid !== "balanced") params.set("avoid", avoid);
     history.replaceState(null, "", "?" + params.toString());
@@ -990,7 +1032,7 @@
     briefing.append(el("span", "mode", "Based on open 311 reports from the last 12 months."));
     drawComparison();
     drawSteps();
-    recordRecent(form.start.value.trim(), form.end.value.trim());
+    recordRecent(startMode === "custom" ? form.start.value.trim() : null, form.end.value.trim());
     results.classList.add("fresh"); // cards cascade in once; route taps re-render silently
     clearTimeout(render.freshTimer);
     render.freshTimer = setTimeout(function () { results.classList.remove("fresh"); }, 900);
@@ -1011,6 +1053,11 @@
 
   form.addEventListener("submit", function (event) {
     event.preventDefault();
+    if (!form.end.value.trim()) { setStatus("Enter a destination.", true); form.end.focus(); return; }
+    resolveStart(runTrip);
+  });
+
+  function runTrip(startValue) {
     button.disabled = true;
     if (mobileMq.matches && panelOpen) {
       // Drop the sheet to half so the map and the live planning steps share the
@@ -1029,9 +1076,9 @@
     live.hidden = false;
 
     const avoid = form.avoid.value === "strong" ? "strong" : "balanced";
-    updateUrl(form.start.value, form.end.value, avoid);
+    updateUrl(startMode === "custom" ? startValue : null, form.end.value, avoid);
     const source = new EventSource(
-      "/api/trip/stream?start=" + encodeURIComponent(form.start.value) +
+      "/api/trip/stream?start=" + encodeURIComponent(startValue) +
       "&end=" + encodeURIComponent(form.end.value) + "&avoid=" + avoid
     );
     function finish() {
@@ -1068,7 +1115,7 @@
     source.onerror = function () { // connection-level failure (e.g. bad input, server down)
       tripFailed("Could not plan the trip. Check the addresses and try again.");
     };
-  });
+  }
 
   // ---- Live navigation --------------------------------------------------------
   // Follows the device's position along the active route like Google Maps or
@@ -1794,15 +1841,17 @@
   }
 
   // Which trip field a chip should fill: the one last touched, else "Going to".
-  let lastField = "end";
   form.start.addEventListener("focus", function () { lastField = "start"; });
   form.end.addEventListener("focus", function () { lastField = "end"; });
 
   function fillFromPlace(place) {
-    const target = lastField === "start" ? form.start : form.end;
+    const toStart = lastField === "start" && startMode === "custom";
+    const target = toStart ? form.start : form.end;
     target.value = place.address;
+    if (toStart) fromText.textContent = place.address;
     openPanel();
     expandTripForm();
+    if (!toStart && startMode === "location") { submitTrip(); return; } // Home from here: just go
     const other = target === form.start ? form.end : form.start;
     if (other.value.trim()) button.focus(); else other.focus();
   }
@@ -1908,10 +1957,10 @@
   });
 
   // Recents: the last few trips, newest first, offered in the "Where to?" pill.
-  function loadRecents() { return readJson(RECENTS_KEY).filter((r) => r && r.start && r.end); }
+  function loadRecents() { return readJson(RECENTS_KEY).filter((r) => r && r.end); }
   function recordRecent(start, end) {
-    const key = (start + "|" + end).toLowerCase();
-    const recents = loadRecents().filter((r) => (r.start + "|" + r.end).toLowerCase() !== key);
+    const key = ((start || "") + "|" + end).toLowerCase();
+    const recents = loadRecents().filter((r) => ((r.start || "") + "|" + r.end).toLowerCase() !== key);
     recents.unshift({ start: start, end: end, at: new Date().toISOString() });
     writeJson(RECENTS_KEY, recents.slice(0, MAX_RECENTS));
   }
@@ -1934,15 +1983,14 @@
       loadRecents().slice(0, 3).forEach(function (r) {
         items.push({
           icon: PLACE_ICONS.recent, cls: "recent",
-          label: cleanLabel(r.start) + " → " + cleanLabel(r.end),
-          sub: "Recent trip",
+          label: r.start ? cleanLabel(r.start) + " \u2192 " + cleanLabel(r.end) : cleanLabel(r.end),
+          sub: r.start ? "Recent trip" : "Recent trip from your location",
           pick: function () {
-            form.start.value = r.start;
+            if (r.start) { form.start.value = r.start; setStartMode("custom"); } else setStartMode("location");
             form.end.value = r.end;
             openPanel();
             expandTripForm();
-            if (form.requestSubmit) form.requestSubmit();
-            else form.dispatchEvent(new Event("submit", { cancelable: true }));
+            submitTrip();
           },
         });
       });
@@ -1958,12 +2006,11 @@
     const params = new URLSearchParams(location.search);
     const from = (params.get("from") || "").trim();
     const to = (params.get("to") || "").trim();
-    if (!from || !to) return;
-    form.start.value = from.slice(0, 200);
+    if (!to) return;
+    if (from) { form.start.value = from.slice(0, 200); setStartMode("custom"); }
     form.end.value = to.slice(0, 200);
     form.avoid.value = params.get("avoid") === "strong" ? "strong" : "balanced";
     openPanel();
-    if (form.requestSubmit) form.requestSubmit();
-    else form.dispatchEvent(new Event("submit", { cancelable: true }));
+    submitTrip();
   })();
 })();

@@ -197,16 +197,21 @@
           <span class="trip-summary-edit">Edit</span>
         </button>
         <form id="trip-form" autocomplete="off">
-          <label for="start">Starting from</label>
-          <div class="input-geo">
-            <input id="start" name="start" type="text" maxlength="200" required
-                   placeholder="Temple University" value="Temple University">
+          <label for="end">Where to?</label>
+          <input id="end" name="end" type="text" maxlength="200" required
+                 placeholder="Citizens Bank Park">
+          <div id="from-row" class="from-row">
+            <span class="from-label">From</span>
+            <button type="button" id="from-toggle" class="from-pill" aria-expanded="false"
+                    aria-controls="start-wrap"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg><span id="from-text">Your location</span><span class="from-change">Change</span></button>
+          </div>
+          <div id="start-wrap" class="input-geo" hidden>
+            <label for="start">Starting from</label>
+            <input id="start" name="start" type="text" maxlength="200"
+                   placeholder="Temple University">
             <button id="use-location" class="geo-btn" type="button"
                     title="Use my current location" aria-label="Use my current location"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg></button>
           </div>
-          <label for="end">Going to</label>
-          <input id="end" name="end" type="text" maxlength="200" required
-                 placeholder="Citizens Bank Park" value="Citizens Bank Park">
           <div id="saved-row" class="saved-row" role="group" aria-label="Saved places"></div>
           <span class="avoid-label" id="avoid-label">Pothole avoidance</span>
           <fieldset class="avoid-switch" aria-labelledby="avoid-label">

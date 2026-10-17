@@ -37,9 +37,9 @@ Built in Philadelphia by David Pugliese. Open source under the MIT license.
 Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](https://potholejawn.app)) — installable to a phone home screen as a PWA.
 
 - The map opens on **every open pothole report in Philly right now**, plotted citywide and clickable.
-- Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data (Oct 2026): the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
+- Type a destination into the **"Where to?" pill** and go. Trips start from your location, like Google Maps; tap **Change** next to "From" to start somewhere else. Try `Citizens Bank Park` from `Temple University`: real result from live data (Oct 2026), the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
 - Save **Home**, **Work**, and favourites: they appear as chips under the trip form, at the top of every search list, and recent trips are one tap away in the "Where to?" pill. Everything stays on your device.
-- Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?from=…&to=…&avoid=strong`).
+- Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?to=…&avoid=strong`, with `from=` only when you chose a start).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
 - After a trip, open **"How this route was chosen"** to see every lookup behind the pick.
 
