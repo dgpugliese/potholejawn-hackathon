@@ -596,6 +596,8 @@
     );
   }
 
+  const LOCATE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>';
+
   // opts.geolocate: optional callback for a leading "Use my current location"
   // row. opts.onPick: called after a suggestion fills the input (pill flow).
   function attachAutocomplete(input, opts) {
@@ -706,7 +708,7 @@
       let list = [];
       if (opts.geolocate) {
         list.push({
-          glyph: "\u{1F4CD}",
+          icon: LOCATE_ICON,
           label: "Use my current location",
           pick: opts.geolocate,
         });
@@ -2018,8 +2020,8 @@
       if (needle && name.toLowerCase().indexOf(needle) === -1 && p.address.toLowerCase().indexOf(needle) === -1) return;
       items.push({
         icon: PLACE_ICONS[p.kind], cls: "saved",
-        label: p.label || (p.kind === "home" ? "Home" : p.kind === "work" ? "Work" : "Saved"),
-        sub: p.address,
+        label: name === p.kind ? (p.kind === "home" ? "Home" : p.kind === "work" ? "Work" : "Saved") : name,
+        sub: p.address.toLowerCase() === name.toLowerCase() ? "Saved place" : p.address,
         pick: function () { opts.choose(p.address); },
       });
     });
