@@ -3,8 +3,7 @@
 # docs/deploy.md is connected, or by hand with:
 #   gcloud builds submit --config cloudbuild.yaml .
 #
-# The Anthropic key never appears here: Cloud Run reads it from Secret Manager
-# (secret "anthropic-api-key") at container start.
+# No secrets: the web app talks only to public data services.
 substitutions:
   _REGION: us-east4
   _SERVICE: potholejawn
@@ -51,8 +50,9 @@ steps:
       - --min-instances=0
       - --max-instances=3
       - --cpu-boost
-      - --update-secrets=ANTHROPIC_API_KEY=anthropic-api-key:latest
-      - --set-env-vars=RATE_MAX_PER_IP=6,RATE_WINDOW_SECONDS=300,RATE_MAX_PER_HOUR=60,RATE_MAX_CONCURRENT=3
+      - --clear-secrets
+      - --clear-env-vars
+      - --set-env-vars=PRELOAD_GRAPH=1
       - --labels=app=potholejawn,managed-by=cloudbuild
 
 images:

@@ -7,11 +7,15 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12"
 authors = [{ name = "David Pugliese" }]
 dependencies = [
-    "anthropic==1.7.0",
     "requests==2.33.1",
     "python-dotenv==1.2.2",
     "flask==3.1.3",
 ]
+
+[project.optional-dependencies]
+# The 311 analyst CLI (python -m pothole_agent.cli) is the only thing that
+# talks to a model; the web app does not. Install with: pip install -e ".[analyst]"
+analyst = ["anthropic==1.7.0"]
 
 [project.urls]
 Homepage = "https://potholejawn.com"
@@ -32,7 +36,6 @@ ignore = [
 # each site logs server-side and returns a generic message to the browser.
 "pothole_agent/webapp.py" = ["BLE001"]
 "pothole_agent/agent.py" = ["BLE001"]
-"pothole_agent/trip.py" = ["BLE001"]
 # S608 is a false positive here: this SQL is assembled from validated,
 # clamped numbers only (see module docstring); model-written SQL goes
 # through guardrails.validate_sql instead.

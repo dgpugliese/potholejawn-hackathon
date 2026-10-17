@@ -5,13 +5,15 @@ product. Live at potholejawn.com on Google Cloud (Cloud Run). All infrastructure
 stays on Google Cloud.
 
 ## What this is
-potholejawn: a Waze-style map that routes around potholes. User enters start and
-destination in Philly; the app fetches OSRM's fastest routes, plans its own
-pothole-aware route on a street graph with live 311 reports as penalties, verifies
-every route against the city's data, and recommends one. See README.md.
-- `agent.py`       generic tool loop (`run_agent`) plus the 311 analyst (`investigate`),
-                   which is CLI-only since Oct 2026 (the Ask tab was removed from the UI)
-- `trip.py`        trip agent, its tools (TripContext), and the no-LLM fallback planner
+potholejawn: a Waze-style map that routes around potholes. User enters a destination
+(start defaults to their location); the app fetches OSRM's fastest routes, plans its
+own pothole-aware route on a street graph with live 311 reports as penalties,
+verifies every route against the city's data, and recommends one. No model is in
+the web app's loop (removed Oct 17, 2026: it cost money, time, and a secret for a
+paragraph the template now writes). See README.md.
+- `agent.py`       generic tool loop (`run_agent`) plus the 311 analyst (`investigate`):
+                   CLI-only research tool, optional `anthropic` extra
+- `trip.py`        deterministic trip planner (TripContext, scoring, briefing text)
 - `routing.py`     geocoders, OSRM (routes, via-snap, directions), PostGIS queries
                    (SQL built from numbers only)
 - `streetgraph.py` street graph builder (Overpass -> data/philly_graph.json.gz) and
@@ -22,15 +24,16 @@ every route against the city's data, and recommends one. See README.md.
 
 ## Deployment
 Google Cloud project potholejawn-prod, Cloud Run service `potholejawn` (us-east4).
-`cloudbuild.yaml` tests, builds, pushes, deploys; the Anthropic key lives in Secret
-Manager. See docs/deploy.md. The street graph ships in the image; rebuild it with
+`cloudbuild.yaml` tests, builds, pushes, deploys. The web app needs no secrets.
+See docs/deploy.md. The street graph ships in the image; rebuild it with
 `python -m pothole_agent.streetgraph build` every few months.
 
 ## Rules
-- Never commit secrets. `.env` is gitignored; keep it that way.
+- Never commit secrets. `.env` is gitignored; keep it that way. The web app must
+  stay secret-free; only the analyst CLI may use an API key.
 - Keep dependencies pinned in requirements.txt and keep the list short.
 - Every new behaviour gets a test. Run `pytest -q` before each commit.
-- All model-written SQL must go through `validate_sql`. Never bypass it.
+- All model-written SQL (analyst CLI) must go through `validate_sql`. Never bypass it.
 - Small commits with clear messages.
 - The smooth route must always be scanned by the same Carto corridor query as the
   OSRM routes; never report our own matching count as the pothole count.
@@ -47,17 +50,17 @@ Manager. See docs/deploy.md. The street graph ships in the image; rebuild it wit
 
 ## Status (Oct 17, 2026)
 Smooth router, directions, avoidance switch, share links, Google Maps hand-off,
-live navigation (GPS following, voice, pothole-ahead alerts, off-route re-routing
-via /api/navigate, preview mode), and the Cloud Build pipeline are built and
-tested (65 tests, fallback and navigation paths verified live in a browser). The agent path with `find_smooth_route` is unit-tested with a fake client;
-run it once against the real API after setting ANTHROPIC_API_KEY in .env.
+live navigation (GPS following, voice, speedometer with posted limits, pothole-ahead
+alerts, alternatives, off-route re-routing, preview mode), saved places, destination-
+first flow, glass UI, and the Cloud Build pipeline are built and tested (60 tests,
+verified live in a browser). The model and its rate limiter are gone from the web app.
 
 ## Next steps, in order
-1. Create the `anthropic-api-key` secret and IAM bindings (docs/deploy.md), rotate
-   the key, deploy with `gcloud builds submit --config cloudbuild.yaml .`.
-2. Run one real agent trip and tune TRIP_SYSTEM_PROMPT so the briefing compares the
-   smooth route with the fastest one in plain numbers.
-3. Uptime check and an alert on 5xx in Cloud Monitoring; a Cloud Scheduler job that
-   rebuilds the street graph monthly is optional.
-4. Product ideas: self-hosted OSRM on Cloud Run for traffic-aware times; severity
-   from report text; a "was this patched?" feedback loop; other cities' 311 feeds.
+1. Deploy with `gcloud builds submit --config cloudbuild.yaml .` (no secrets needed);
+   then map potholejawn.com to the service if not already.
+2. Uptime check and an alert on 5xx in Cloud Monitoring; optional monthly Cloud
+   Scheduler job that rebuilds the street graph.
+3. Self-host OSRM (Cloud Run or a small VM) before real traffic: the public demo
+   server has no uptime promise.
+4. Android: TWA of the PWA first, then a Kotlin app and an Android Auto module on the
+   Car App Library, sharing the same JSON API.

@@ -4,7 +4,7 @@
 
 # potholejawn
 
-**A pothole-aware router for Philadelphia: live 311 data, our own street graph, and an AI agent that explains the pick.**
+**A pothole-aware router and navigation app for Philadelphia, built on live 311 data and its own street graph.**
 
 [![tests](https://img.shields.io/badge/tests-62%20passing-brightgreen)](tests)
 [![python](https://img.shields.io/badge/python-3.12-blue)](pyproject.toml)
@@ -20,8 +20,7 @@
 Type where you are and where you are going in Philadelphia. The app fetches the
 fastest driving routes, then **re-plans the drive on its own street graph with
 every open 311 pothole report as a time penalty**, verifies each route against
-the city's live data, and recommends one. An AI agent runs the tools and writes
-the briefing; a plain-Python planner produces the same result when it cannot.
+the city's live data, recommends one, and explains the pick from the numbers.
 Then tap **Start navigation**: the map follows your position with a maneuver
 banner, voice guidance, a speedometer with the posted limit, a heads-up for
 every reported pothole ahead, alternative routes from wherever you are, and an
@@ -41,33 +40,29 @@ Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](h
 - Save **Home**, **Work**, and favourites: they appear as chips under the trip form, at the top of every search list, and recent trips are one tap away in the "Where to?" pill. Everything stays on your device.
 - Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?to=…&avoid=strong`, with `from=` only when you chose a start).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
-- After a trip, open **"How this route was chosen"** to see every lookup behind the pick.
+- After a trip, open **"How this route was chosen"** to see every step behind the pick.
 
 ## Under the hood
 
-Two agents, one shared hand-rolled tool-calling loop on the Anthropic API (no
-framework). The model chooses which tools to call and in what order; tool
-errors are fed back so it self-corrects; a 12-step limit and a full JSONL audit
-trail per run keep it bounded and inspectable.
+Everything is plain computation against public data; no model is in the loop.
 
-**Trip agent** — geocodes both endpoints, pulls the fastest route plus
-alternatives from OSRM, asks the **smooth router** for a pothole-aware route,
-runs a PostGIS query against the city's live 311 API for open "Street Defect"
-reports within 30 m of every route, weighs pothole count, report age, and drive
-time, and recommends one with a plain-language briefing. Agent steps stream to
-the panel live over Server-Sent Events, so you watch it think instead of
-staring at a spinner.
+**Trip planner** (`pothole_agent/trip.py`) geocodes both endpoints, pulls the
+fastest route plus alternatives from OSRM, asks the **smooth router** for a
+pothole-aware route, runs a PostGIS query against the city's live 311 API for
+open "Street Defect" reports within 30 m of every route, scores each route on
+minutes plus a time value per report, and writes a briefing from the numbers:
+reports avoided versus the fastest route, the roughest half mile, the oldest
+open report. Steps stream to the panel live over Server-Sent Events.
 
 **311 data questions (terminal only)** — `python -m pothole_agent.cli` answers
 open-ended questions by writing and running guarded SQL against the full
-5.9M-row dataset, reading its own errors and retrying. It shares the trip
-agent's tool loop and is kept as a developer and research tool; it is not part
-of the app's UI.
+5.9M-row dataset with a Claude tool loop. It is an optional research tool
+(`pip install -e ".[analyst]"`), not part of the app.
 
 **Map-first UI** — full-viewport map with a floating "Where to?" search pill, a
 slide-in results panel on desktop and a bottom sheet on mobile, a citywide layer
-of every open pothole report, route signs (A/B with
-report counts), the brand emblem as a map watermark, and PWA install support.
+of every open pothole report, route cards, live navigation, and PWA install
+support.
 
 ## Screenshots
 
@@ -87,20 +82,20 @@ Residents, journalists, and council staff should be able to find that out by ask
 
 ```
         map-first UI (Leaflet + Flask)              pothole_agent/webapp.py, static/
-        citywide pothole layer · "Where to?" pill · autocomplete · avoidance switch
+        citywide pothole layer · "Where to?" pill · saved places · navigation
                 |
-"Temple University" -> "Citizens Bank Park"
+"Where to?" (from your location, or a chosen start)
         |
-   trip agent (Claude + tools)                      pothole_agent/trip.py
-        +-- geocode_address     US Census geocoder, OpenStreetMap fallback
-        +-- find_routes         OSRM: fastest route plus alternatives (A, B, ...)
-        +-- find_smooth_route   our router (route S), see below
-        +-- scan_route          PostGIS query on the city's 311 API: open
-        |                       'Street Defect' reports within 30 m of the route
-        +-- recommend_route     records the choice as structured output
+   trip planner                                     pothole_agent/trip.py
+        +-- geocode            US Census geocoder, OpenStreetMap fallback
+        +-- fastest routes     OSRM: fastest route plus alternatives (A, B, ...)
+        +-- smooth route       our router (route S), see below
+        +-- scan every route   PostGIS query on the city's 311 API: open
+        |                      'Street Defect' reports within 30 m of the route
+        +-- score and brief    minutes + time per report; text from the numbers
         |
-   agent steps stream back live (SSE) -> slide-in panel / bottom sheet
-        route signs · comparison · briefing · directions · Google Maps hand-off
+   steps stream back live (SSE) -> slide-in panel / bottom sheet
+        route cards · comparison · briefing · directions · Start navigation
 ```
 
 ### The smooth router (`pothole_agent/streetgraph.py`, `smooth.py`)
@@ -126,9 +121,8 @@ offer alternatives. So potholejawn routes on its own copy of the city's streets:
 5. **Verify.** The smooth route is scanned with the exact same 311 corridor
    query as every other route, so its count is the city's number, not ours.
 
-The deterministic pick (used when the agent is unavailable, and suggested to
-it) scores each route as minutes plus the same time value per report the router
-optimised with, so the recommendation agrees with the plan.
+The pick scores each route as minutes plus the same time value per report the
+router optimised with, so the recommendation agrees with the plan.
 
 ### Live navigation (`static/app.js`, `/api/navigate`)
 
@@ -164,38 +158,30 @@ model, which fixes the SQL and retries.
 
 ## Reliability and safety
 
-- **Graceful degradation**: if the API key is missing or the model call fails,
-  a plain-Python planner produces the same map and a simpler briefing. If the
-  agent skips a route, `ensure_complete` scans it anyway. The demo never dies.
+- **Graceful degradation**: if the street graph is unavailable, the fastest
+  routes are still compared and the briefing says so; if OSRM cannot snap the
+  smooth route, the graph geometry is used.
 - **The model never writes the route SQL.** It is built in `routing.py` from
   validated numbers only, and the search radius is clamped to 10 to 100 m.
 - **Geofence**: every coordinate must fall inside a Philadelphia bounding box.
 - **Browser safety**: API data is inserted with `textContent`, never parsed as
   HTML; CDN assets are pinned with Subresource Integrity hashes.
-- **Rate limiting**: per-IP and global rate limits on the public deployment's
-  agent endpoints.
-- **Cost engineering**: Anthropic prompt caching on the agent loop (later steps
-  read the prompt prefix from cache at ~10% price) plus a one-hour trip-result
-  cache for repeated routes.
+- **No secrets in the web app**: it talks only to public data services, so
+  there is nothing to leak and nothing to rate limit beyond politeness caches.
 - **Honest framing**: markers are resident reports, not verified potholes, and
   the UI says so.
-- **Read-only SQL guardrail** (`pothole_agent/guardrails.py`): the model's SQL is
-  treated as untrusted input. Single SELECT only, table allowlist, no comments,
+- **Read-only SQL guardrail** (`pothole_agent/guardrails.py`, analyst CLI): the
+  model's SQL is treated as untrusted input. Single SELECT only, table allowlist, no comments,
   no admin functions, results capped at 200 rows.
-- **Step limit**: a run stops after 12 model turns, so it cannot loop forever.
-- **Full audit trail**: every thought, tool call, SQL query, error, and token
-  count is written to `runs/run-<timestamp>.jsonl`.
-- **Honest analysis rules**: the agent reports the open-case share next to any
-  time-to-close figure, and does not confuse "more reports" with "more potholes".
-- **Tests** run with a fake model client and a synthetic street grid, so no API
-  key or network is needed.
+- **Tests** run against fakes and a synthetic street grid, so no network is
+  needed.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env          # then add your ANTHROPIC_API_KEY
+pip install -e ".[analyst]"   # optional: the terminal 311 analyst needs an Anthropic key in .env
 ```
 
 ## Run
@@ -210,7 +196,7 @@ python -m pothole_agent.streetgraph build         # refresh the street graph fro
 ## Deploy
 
 Runs entirely on Google Cloud: Cloud Run, Artifact Registry, Cloud Build,
-Secret Manager, Cloud Logging. See [docs/deploy.md](docs/deploy.md); the
+Cloud Logging. No secrets. See [docs/deploy.md](docs/deploy.md); the
 short version is `gcloud builds submit --config cloudbuild.yaml .`
 
 ## Test
@@ -236,8 +222,9 @@ server. Map tiles: Esri World Street Map.
 
 ## Tools used
 
-Python 3.12, Anthropic API (Claude, tool use), Flask, Leaflet, PostGIS via the City of
-Philadelphia Carto SQL API, OSRM, US Census Geocoder, Nominatim, pytest.
+Python 3.12, Flask, Leaflet, PostGIS via the City of Philadelphia Carto SQL API,
+OSRM, OpenStreetMap, US Census Geocoder, Nominatim, pytest. The optional analyst
+CLI uses the Anthropic API.
 
 ## License
 

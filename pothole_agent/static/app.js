@@ -977,32 +977,7 @@
   }
 
   function describeStep(event) {
-    switch (event.type) {
-      case "thought": return event.text;
-      case "question": return null;
-      case "tool_call":
-        if (event.input && typeof event.input.query === "string") {
-          return "Ran SQL (" + event.tool + "): " + event.input.query;
-        }
-        return describeToolCall(event.tool, event.input || {});
-      case "tool_error": return "Error from " + event.tool + ": " + event.preview;
-      case "usage": return null;
-      case "agent_unavailable": return "Planned with the built-in route picker.";
-      case "fallback": return event.text;
-      case "final": return null;
-      default: return null;
-    }
-  }
-
-  function describeToolCall(tool, input) {
-    switch (tool) {
-      case "geocode_address": return "Looked up \u201c" + input.address + "\u201d as the " + (input.role || "place");
-      case "find_routes": return "Fetched the fastest driving routes and alternatives";
-      case "find_smooth_route": return "Planned a smooth route with every open pothole report as a street penalty";
-      case "scan_route": return "Scanned route " + input.route_id + " against the city\u2019s 311 data";
-      case "recommend_route": return "Recommended route " + input.route_id + (input.reason ? ": " + input.reason : "");
-      default: return "Called " + tool + " " + JSON.stringify(input);
-    }
+    return event && typeof event.text === "string" ? event.text : null;
   }
 
   function drawSteps() {
@@ -1010,7 +985,7 @@
     list.replaceChildren();
     trip.steps.forEach(function (event) {
       const text = describeStep(event);
-      if (text) list.append(el("li", event.type === "tool_error" ? "error" : "", text));
+      if (text) list.append(el("li", "", text));
     });
     document.getElementById("activity").hidden = trip.steps.length === 0;
   }
@@ -1090,7 +1065,7 @@
       const step = JSON.parse(e.data);
       const text = describeStep(step);
       if (text) {
-        liveList.append(el("li", step.type === "tool_error" ? "error" : "", text));
+        liveList.append(el("li", "", text));
         liveList.lastChild.scrollIntoView({ block: "nearest" });
       }
     });

@@ -1,6 +1,9 @@
 """Small Flask app: a map UI on top of the trip planner.
 
 Run with:  python -m pothole_agent.webapp   then open http://127.0.0.1:5000
+
+Every endpoint is plain computation plus calls to public data services; no
+model is involved, so there is nothing to rate limit beyond politeness caches.
 """
 
 from __future__ import annotations
@@ -19,57 +22,12 @@ from .smooth import alternatives, graph_status, navigate, normalize_avoidance, r
 from .trip import plan_trip
 
 STATIC_DIR = Path(__file__).parent / "static"
-
-# Rate limits for the agent endpoints (they spend API tokens per request).
-# Overridable via env vars; localhost is always exempt for local demos/tests.
-RATE_MAX_PER_IP = int(os.environ.get("RATE_MAX_PER_IP", "6"))  # runs per window per IP
-RATE_WINDOW_SECONDS = int(os.environ.get("RATE_WINDOW_SECONDS", "300"))
-RATE_MAX_PER_HOUR = int(os.environ.get("RATE_MAX_PER_HOUR", "60"))  # runs/hour, all IPs
-RATE_MAX_CONCURRENT = int(os.environ.get("RATE_MAX_CONCURRENT", "3"))  # active runs
-RATE_LIMIT_MESSAGE = "Rate limit reached — try again in a few minutes."
-_LOCAL_IPS = {"127.0.0.1", "::1"}
-
-
-class _RateLimiter:
-    """In-memory, thread-safe sliding-window limiter. One per app instance."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._per_ip: dict[str, list[float]] = {}
-        self._recent: list[float] = []
-        self._active = 0
-
-    def try_acquire(self, ip: str) -> bool:
-        """Reserve a run slot for this IP; False means 'limited, refuse'."""
-        if ip in _LOCAL_IPS:
-            return True
-        now = time.monotonic()
-        with self._lock:
-            hits = [t for t in self._per_ip.get(ip, []) if now - t < RATE_WINDOW_SECONDS]
-            self._per_ip[ip] = hits
-            self._recent = [t for t in self._recent if now - t < 3600]
-            if (
-                self._active >= RATE_MAX_CONCURRENT
-                or len(hits) >= RATE_MAX_PER_IP
-                or len(self._recent) >= RATE_MAX_PER_HOUR
-            ):
-                return False
-            hits.append(now)
-            self._recent.append(now)
-            self._active += 1
-            return True
-
-    def release(self, ip: str) -> None:
-        if ip in _LOCAL_IPS:
-            return
-        with self._lock:
-            self._active = max(0, self._active - 1)
+SERVICE_ERROR = "A map or city data service is not responding. Try again."
 
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # requests are two short strings
-    limiter = _RateLimiter()
     if os.environ.get("PRELOAD_GRAPH") == "1":
         # Load the street graph at start (about a quarter second) so the first
         # trip of a fresh container does not pay for it. A missing graph file is
@@ -80,23 +38,13 @@ def create_app() -> Flask:
         else:
             app.logger.warning("smooth router unavailable: %s", status["error"])
 
-    def client_ip() -> str:
-        # Behind the Cloudflare tunnel the real client is in CF-Connecting-IP.
-        return request.headers.get("CF-Connecting-IP") or request.remote_addr or ""
-
     @app.get("/")
     def index():
         return send_from_directory(STATIC_DIR, "index.html")
 
     @app.get("/healthz")
     def health():
-        return jsonify(
-            {
-                "ok": True,
-                "agent_available": bool(os.environ.get("ANTHROPIC_API_KEY")),
-                "smooth_router": graph_status(),
-            }
-        )
+        return jsonify({"ok": True, "smooth_router": graph_status()})
 
     def validate_addresses(start, end) -> str | None:
         """Return an error message for the browser, or None if the input is fine."""
@@ -107,36 +55,31 @@ def create_app() -> Flask:
                 return f"The {label} address is too long."
         return None
 
-    # Viewport pothole layer: no LLM tokens spent, so no rate limit — just a
-    # short shared cache to be polite to the city's API.
+    # Viewport pothole layer: a short shared cache to be polite to the city's API.
     potholes_cache: dict[str, tuple[float, list]] = {}
     potholes_cache_lock = threading.Lock()
 
-    # Trip results: popular endpoint pairs repeat (demos, shares), and 311 data
-    # moves slowly, so a repeat within the window costs zero API tokens.
-    trip_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+    # Trip results: popular endpoint pairs repeat (demos, shares) and 311 data
+    # moves slowly, so a repeat within the window skips the routing services.
+    trip_cache: dict[tuple[str, str, str], tuple[float, dict]] = {}
     trip_cache_lock = threading.Lock()
-    trip_cache_seconds = int(os.environ.get("TRIP_CACHE_SECONDS", "3600"))
+    trip_cache_seconds = int(os.environ.get("TRIP_CACHE_SECONDS", "600"))
 
     def trip_key(start: str, end: str, avoidance: str) -> tuple[str, str, str]:
         return (start.strip().lower(), end.strip().lower(), avoidance)
 
     def cached_trip(start: str, end: str, avoidance: str) -> dict | None:
-        key = trip_key(start, end, avoidance)
         with trip_cache_lock:
-            hit = trip_cache.get(key)
+            hit = trip_cache.get(trip_key(start, end, avoidance))
             if hit and time.monotonic() - hit[0] < trip_cache_seconds:
                 return hit[1]
         return None
 
     def store_trip(start: str, end: str, avoidance: str, result: dict) -> None:
-        if result.get("mode") != "agent":  # fallback runs are cheap to redo
-            return
-        key = trip_key(start, end, avoidance)
         with trip_cache_lock:
             if len(trip_cache) > 128:
                 trip_cache.clear()
-            trip_cache[key] = (time.monotonic(), result)
+            trip_cache[trip_key(start, end, avoidance)] = (time.monotonic(), result)
 
     @app.get("/api/potholes")
     def potholes():
@@ -177,10 +120,8 @@ def create_app() -> Flask:
     def navigate_endpoint():
         """Re-route from a live position: ?from=lat,lon&to=lat,lon&avoid=balanced.
 
-        Used by navigation mode when the driver leaves the route. No model
-        tokens are spent, so it is not behind the agent rate limiter; the
-        browser only calls it after an off-route fix, at most every few
-        seconds.
+        Used by navigation mode when the driver leaves the route, and with
+        alternatives=1 to list every option from the current position.
         """
         start = parse_point(request.args.get("from", ""))
         end = parse_point(request.args.get("to", ""))
@@ -216,48 +157,37 @@ def create_app() -> Flask:
         problem = validate_addresses(start, end)
         if problem:
             return jsonify({"error": problem}), 400
-        use_agent = bool(body.get("use_agent", True)) and bool(os.environ.get("ANTHROPIC_API_KEY"))
         avoidance = normalize_avoidance(body.get("avoid"))
         hit = cached_trip(start, end, avoidance)
-        if hit is not None:  # before the limiter: cache hits are free
+        if hit is not None:
             return jsonify({**hit, "cached": True})
-        ip = client_ip()
-        if not limiter.try_acquire(ip):
-            return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
         try:
-            result = plan_trip(start, end, use_agent=use_agent, avoidance=avoidance)
+            result = plan_trip(start, end, avoidance=avoidance)
             store_trip(start, end, avoidance, result)
             return jsonify(result)
         except RoutingError as error:
             return jsonify({"error": str(error)}), 400
         except Exception:  # never leak internals to the browser
             app.logger.exception("trip planning failed")
-            return jsonify(
-                {"error": "A map or city data service is not responding. Try again."}
-            ), 502
-        finally:
-            limiter.release(ip)
+            return jsonify({"error": SERVICE_ERROR}), 502
 
     @app.get("/api/trip/stream")
     def trip_stream():
         """Same planner as /api/trip, but streamed as Server-Sent Events.
 
-        Emits `step` events as the agent (or the fallback planner) works, then
-        one `result` event with the full trip payload, or one `trip_error`.
+        Emits `step` events as the planner works, then one `result` event with
+        the full trip payload, or one `trip_error`.
         """
         start, end = request.args.get("start"), request.args.get("end")
         problem = validate_addresses(start, end)
         if problem:
             return jsonify({"error": problem}), 400
-        use_agent = bool(request.args.get("use_agent", "1") != "0") and bool(
-            os.environ.get("ANTHROPIC_API_KEY")
-        )
         avoidance = normalize_avoidance(request.args.get("avoid"))
         hit = cached_trip(start, end, avoidance)
-        if hit is not None:  # before the limiter: cache hits are free
+        if hit is not None:
 
             def generate_cached():
-                step = {"type": "cached", "text": "Serving a recent result for this exact trip."}
+                step = {"type": "step", "text": "Serving a recent result for this exact trip."}
                 yield f"event: step\ndata: {json.dumps(step)}\n\n"
                 yield f"event: result\ndata: {json.dumps({**hit, 'cached': True}, default=str)}\n\n"
 
@@ -266,19 +196,12 @@ def create_app() -> Flask:
                 mimetype="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
             )
-        ip = client_ip()
-        if not limiter.try_acquire(ip):
-            return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
         events: queue.Queue = queue.Queue()
 
         def worker() -> None:
             try:
                 result = plan_trip(
-                    start,
-                    end,
-                    use_agent=use_agent,
-                    on_step=lambda e: events.put(("step", e)),
-                    avoidance=avoidance,
+                    start, end, on_step=lambda e: events.put(("step", e)), avoidance=avoidance
                 )
                 store_trip(start, end, avoidance, result)
                 events.put(("result", result))
@@ -286,14 +209,8 @@ def create_app() -> Flask:
                 events.put(("trip_error", {"error": str(error)}))
             except Exception:  # never leak internals to the browser
                 app.logger.exception("trip planning failed")
-                events.put(
-                    (
-                        "trip_error",
-                        {"error": "A map or city data service is not responding. Try again."},
-                    )
-                )
+                events.put(("trip_error", {"error": SERVICE_ERROR}))
             finally:
-                limiter.release(ip)
                 events.put(None)  # sentinel: stream is done
 
         threading.Thread(target=worker, daemon=True).start()
@@ -323,12 +240,6 @@ def create_app() -> Flask:
 
 
 def main() -> None:
-    try:
-        from dotenv import load_dotenv
-
-        load_dotenv()
-    except ImportError:
-        pass
     create_app().run(host="127.0.0.1", port=int(os.environ.get("PORT", "5000")), debug=False)
 
 

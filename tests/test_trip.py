@@ -1,7 +1,5 @@
 """Trip planner tests. All network calls are replaced with fakes."""
 
-from types import SimpleNamespace
-
 import pytest
 
 from pothole_agent import routing, trip
@@ -83,8 +81,7 @@ def test_long_routes_are_thinned():
 
 
 def test_fallback_planner_prefers_fewer_potholes(fake_services):
-    result = trip.plan_trip("City Hall", "Stadium", use_agent=False)
-    assert result["mode"] == "fallback"
+    result = trip.plan_trip("City Hall", "Stadium")
     assert result["recommended"] == "B"
     assert [len(r["potholes"]) for r in result["routes"]] == [5, 1, 2]
     assert "Route B" in result["briefing"]
@@ -109,7 +106,7 @@ def test_smooth_route_wins_when_it_is_the_better_drive(fake_services, monkeypatc
         "potholes_along",
         lambda route, buffer_m=30: [_pothole(i, 100 + i) for i in range(counts[route.route_id])],
     )
-    result = trip.plan_trip("City Hall", "Stadium", use_agent=False, avoidance="strong")
+    result = trip.plan_trip("City Hall", "Stadium", avoidance="strong")
     assert result["recommended"] == "S" and result["avoidance"] == "strong"
     smooth = next(r for r in result["routes"] if r["route_id"] == "S")
     assert smooth["kind"] == "smooth" and smooth["potholes"] == []
@@ -124,76 +121,11 @@ def test_smooth_router_failure_is_reported_not_fatal(fake_services, monkeypatch)
         raise GraphError("graph file missing")
 
     monkeypatch.setattr(trip, "plan_smooth_route", broken)
-    result = trip.plan_trip("City Hall", "Stadium", use_agent=False)
+    result = trip.plan_trip("City Hall", "Stadium")
     assert result["recommended"] == "B"
     assert [r["route_id"] for r in result["routes"]] == ["A", "B"]
     assert "graph file missing" in result["smooth_error"]
     assert "pothole-aware router was unavailable" in result["briefing"]
-
-
-def test_agent_can_call_find_smooth_route(fake_services):
-    context = trip.TripContext("strong")
-    context.find_routes(39.9526, -75.1652, 39.9061, -75.1665)
-    reply = context.find_smooth_route(39.9526, -75.1652, 39.9061, -75.1665)
-    assert reply["route_id"] == "S" and reply["kind"] == "smooth"
-    assert reply["avoidance"] == "strong"
-    assert sorted(context.routes) == ["A", "B", "S"]
-    # A later find_routes call (the agent retrying) keeps the smooth route.
-    context.find_routes(39.9526, -75.1652, 39.9061, -75.1665)
-    assert "S" in context.routes
-
-
-def test_agent_failure_degrades_to_fallback(fake_services, tmp_path):
-    class BrokenClient:
-        messages = SimpleNamespace(create=lambda **_: (_ for _ in ()).throw(RuntimeError("no key")))
-
-    result = trip.plan_trip("City Hall", "Stadium", client=BrokenClient(), run_dir=tmp_path)
-    assert result["mode"] == "fallback" and result["recommended"] == "B"
-    assert any(step["type"] == "agent_unavailable" for step in result["steps"])
-
-
-def test_agent_path_uses_tools_and_records_choice(fake_services, tmp_path):
-    def use(tool_id, name, **tool_input):
-        return SimpleNamespace(type="tool_use", id=tool_id, name=name, input=tool_input)
-
-    def reply(content, stop):
-        usage = SimpleNamespace(input_tokens=1, output_tokens=1)
-        return SimpleNamespace(content=content, stop_reason=stop, usage=usage)
-
-    script = [
-        reply(
-            [
-                use("1", "geocode_address", address="City Hall", role="start"),
-                use("2", "geocode_address", address="Stadium", role="end"),
-            ],
-            "tool_use",
-        ),
-        reply(
-            [
-                use(
-                    "3",
-                    "find_routes",
-                    start_lat=39.9526,
-                    start_lon=-75.1652,
-                    end_lat=39.9061,
-                    end_lon=-75.1665,
-                )
-            ],
-            "tool_use",
-        ),
-        reply([use("4", "scan_route", route_id="A")], "tool_use"),  # agent forgets route B
-        reply([use("5", "recommend_route", route_id="A", reason="testing")], "tool_use"),
-        reply([SimpleNamespace(type="text", text="Take route A.")], "end_turn"),
-    ]
-    client = SimpleNamespace(messages=SimpleNamespace(create=lambda **_: script.pop(0)))
-    result = trip.plan_trip("City Hall", "Stadium", client=client, run_dir=tmp_path)
-
-    assert result["mode"] == "agent" and result["recommended"] == "A"
-    assert result["briefing"] == "Take route A."
-    route_b = next(r for r in result["routes"] if r["route_id"] == "B")
-    assert len(route_b["potholes"]) == 1, "skipped route should be scanned by ensure_complete"
-    route_s = next(r for r in result["routes"] if r["route_id"] == "S")
-    assert len(route_s["potholes"]) == 2, "ensure_complete should plan and scan the smooth route"
 
 
 def test_unknown_route_id_is_an_error(fake_services):
@@ -207,14 +139,15 @@ def test_api_validates_input():
     assert client.post("/api/trip", json={"start": "", "end": "x"}).status_code == 400
     assert client.post("/api/trip", json={"start": "a" * 500, "end": "x"}).status_code == 400
     assert client.get("/healthz").get_json()["ok"] is True
+    assert "agent_available" not in client.get("/healthz").get_json()
 
 
 def test_plan_trip_streams_steps_live(fake_services):
     seen = []
-    result = trip.plan_trip("City Hall", "Stadium", use_agent=False, on_step=seen.append)
+    result = trip.plan_trip("City Hall", "Stadium", on_step=seen.append)
     assert seen == result["steps"], "on_step should see every recorded step, in order"
-    assert seen, "the fallback planner should narrate its steps"
-    assert seen[0]["type"] == "fallback"
+    assert seen, "the planner should narrate its steps"
+    assert seen[0]["type"] == "step"
     assert any("Picked route B" in step.get("text", "") for step in seen)
 
 
@@ -229,8 +162,7 @@ def _sse_events(body):
     return events
 
 
-def test_stream_endpoint_emits_steps_then_result(fake_services, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_stream_endpoint_emits_steps_then_result(fake_services):
     client = create_app().test_client()
     response = client.get("/api/trip/stream?start=City%20Hall&end=Stadium")
     assert response.status_code == 200
@@ -240,7 +172,7 @@ def test_stream_endpoint_emits_steps_then_result(fake_services, monkeypatch):
     assert names[-1] == "result" and names.count("result") == 1
     assert names.count("step") >= 2, "steps should stream before the result"
     result = events[-1][1]
-    assert result["recommended"] == "B" and result["mode"] == "fallback"
+    assert result["recommended"] == "B"
 
 
 def test_stream_endpoint_validates_input():
@@ -250,7 +182,6 @@ def test_stream_endpoint_validates_input():
 
 
 def test_stream_endpoint_reports_routing_errors(fake_services, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setattr(
         trip, "geocode", lambda address: (_ for _ in ()).throw(RoutingError("no match"))
     )
@@ -261,8 +192,7 @@ def test_stream_endpoint_reports_routing_errors(fake_services, monkeypatch):
     assert "no match" in events[-1][1]["error"]
 
 
-def test_api_returns_trip(fake_services, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_api_returns_trip(fake_services):
     response = (
         create_app().test_client().post("/api/trip", json={"start": "City Hall", "end": "Stadium"})
     )
@@ -271,8 +201,7 @@ def test_api_returns_trip(fake_services, monkeypatch):
     assert response.headers["X-Content-Type-Options"] == "nosniff"
 
 
-def test_api_passes_avoidance_through_and_normalises_junk(fake_services, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+def test_api_passes_avoidance_through_and_normalises_junk(fake_services):
     client = create_app().test_client()
     strong = client.post(
         "/api/trip", json={"start": "City Hall", "end": "Stadium", "avoid": "strong"}
@@ -360,3 +289,27 @@ def test_navigate_alternatives_flag(monkeypatch):
     client = create_app().test_client()
     body = client.get("/api/navigate?from=39.95,-75.16&to=39.9061,-75.1665&alternatives=1")
     assert [r["route_id"] for r in body.get_json()["routes"]] == ["S", "A"]
+
+
+def test_briefing_names_the_roughest_stretch(fake_services, monkeypatch):
+    def clustered(route, buffer_m=30):
+        if route.route_id != "A":
+            return []
+        miles = [0.3, 2.1, 2.2, 2.4, 3.9]
+        return [{**_pothole(i, 10 + i), "mile_marker": m} for i, m in enumerate(miles)]
+
+    monkeypatch.setattr(trip, "potholes_along", clustered)
+    counts_b = trip.plan_trip("City Hall", "Stadium")
+    assert counts_b["recommended"] in ("B", "S")  # A is the rough one; just check the text
+    context = trip.TripContext()
+    context.geocode_address("City Hall", "start")
+    context.geocode_address("Stadium", "end")
+    context.find_routes(0, 0, 0, 0)
+    context.ensure_complete()
+    context.recommended = "A"
+    text = trip.briefing(context)
+    assert "roughest stretch starts around mile 2.1" in text
+    assert "3 reports in half a mile" in text
+    assert "open for 14 days" in text  # the oldest report
+    assert trip.worst_stretch([]) is None
+    assert trip.worst_stretch([{"mile_marker": 1.0, "address": "x"}]) is None
