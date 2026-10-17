@@ -1984,3 +1984,9 @@ input[type="text"] { padding: 0.62rem 0.9rem 0.78rem; }
   .masthead .tagline { display: none; }
   .masthead .gear-btn { width: 40px; height: 40px; }
 }
+
+/* The mobile sheet sits over busy map detail; slightly less see-through so
+   bright map shapes behind it do not read as stray UI. */
+@media (max-width: 768px) {
+  .panel { background: rgba(249, 248, 244, 0.93); }
+}
