@@ -23,8 +23,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 MAX_QUESTION_CHARS = 500
 RUN_DIR = "runs"
 NO_KEY_MESSAGE = (
-    "Analyst needs an API key. Set ANTHROPIC_API_KEY and restart the server "
-    "to ask follow-up questions. Trip planning still works without it."
+    "Questions need an API key. Set ANTHROPIC_API_KEY and restart the server "
+    "to enable them. Trip planning still works without it."
 )
 
 # Rate limits for the agent endpoints (they spend API tokens per request).
@@ -365,7 +365,9 @@ def create_app() -> Flask:
                     events.put(("result", {"answer": answer}))
                 except Exception:  # never leak internals to the browser
                     app.logger.exception("analyst question failed")
-                    events.put(("ask_error", {"error": "The analyst hit an error. Try again."}))
+                    events.put(
+                        ("ask_error", {"error": "Could not answer that right now. Try again."})
+                    )
                 finally:
                     limiter.release(ip)
                     events.put(None)  # sentinel: stream is done

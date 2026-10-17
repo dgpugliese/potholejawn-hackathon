@@ -30,7 +30,7 @@ colour, your voice, miles or kilometres, and a night map. Every route also has
 turn-by-turn directions and a one-tap hand-off to Google Maps that carries the
 smooth route's waypoints.
 
-Built solo by David Pugliese at the **Code & Coffee Philadelphia AI Agent Hackathon, September 20, 2026**.
+Built in Philadelphia by David Pugliese. Open source under the MIT license.
 
 ## Try it
 
@@ -40,9 +40,9 @@ Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](h
 - Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data (Oct 2026): the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
 - Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Start navigation** (or **Preview drive** at a desk), **Drive this in Google Maps**, or copy a share link (`/?from=…&to=…&avoid=strong`).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
-- After a trip, open **"What the agent did"** for the full audit trail, or ask the **311 analyst** an open-ended question ("where is the city slowest at fixing potholes?") right in the panel.
+- After a trip, open **"How this route was chosen"** to see every lookup behind the pick, or switch to **Ask 311 data** for an open-ended question ("where is the city slowest at fixing potholes?") answered from the city's live records.
 
-## How the AI agents are used
+## Under the hood
 
 Two agents, one shared hand-rolled tool-calling loop on the Anthropic API (no
 framework). The model chooses which tools to call and in what order; tool
@@ -57,10 +57,10 @@ time, and recommends one with a plain-language briefing. Agent steps stream to
 the panel live over Server-Sent Events, so you watch it think instead of
 staring at a spinner.
 
-**311 accountability analyst** — answers open-ended questions by writing and
-running guarded SQL against the full 5.9M-row dataset, reading its own errors
-and retrying. Available from the "Ask the analyst" box in the panel or the CLI.
-Both agents share one generic tool loop.
+**311 data questions** — the "Ask 311 data" tab answers open-ended questions by
+writing and running guarded SQL against the full 5.9M-row dataset, reading its
+own errors and retrying. Also available from the CLI. Both agents share one
+generic tool loop.
 
 **Map-first UI** — full-viewport map with a floating "Where to?" search pill, a
 slide-in results panel on desktop and a bottom sheet on mobile, a citywide layer
@@ -69,9 +69,9 @@ report counts), the brand emblem as a map watermark, and PWA install support.
 
 ## Screenshots
 
-| Desktop — trip result | Mobile |
+| Desktop — trip result | Mobile — live navigation |
 |---|---|
-| <img src="docs/screenshots/trip.png" alt="Desktop trip view: slide-in panel with the agent's briefing, Route A recommended with 9 reports vs Route B's 13, a 'What the agent did' audit section, and both routes drawn on the map with pothole markers" width="560"> | <img src="docs/screenshots/mobile.png" alt="Mobile view: full-height map with the 'Where to?' pill, citywide pothole dots, and a live count of 1,223 open reports in view" width="240"> |
+| <img src="docs/screenshots/trip.png" alt="Desktop trip view: slide-in panel with the smooth route recommended at 0 reports versus 7 on the fastest, the comparison banner, the briefing, and both routes drawn on the map" width="560"> | <img src="docs/screenshots/mobile.png" alt="Mobile navigation view at night: maneuver banner reading 'In 250 ft, turn left onto North Broad Street', the vehicle icon on the route, a speedometer with the posted limit, and the ETA bar" width="240"> |
 
 ## Why
 
@@ -158,8 +158,8 @@ Navigation chrome, in the spirit of Google Maps and Waze:
 
 The analyst agent (`pothole_agent/agent.py`, `tools.py`) uses `get_schema`,
 `list_categories`, and `run_sql`. When a query fails, the error goes back to the
-model, which fixes the SQL and retries. The "Ask the analyst" box in the UI
-streams this agent's steps live and shows every SQL query it runs.
+model, which fixes the SQL and retries. The "Ask 311 data" tab streams its
+steps live and shows every SQL query it runs.
 
 ## Reliability and safety
 
@@ -201,7 +201,7 @@ cp .env.example .env          # then add your ANTHROPIC_API_KEY
 
 ```bash
 python -m pothole_agent.webapp                    # map UI at http://127.0.0.1:5000
-python -m pothole_agent.cli                       # analyst agent, default question
+python -m pothole_agent.cli                       # 311 data question from the terminal
 python -m pothole_agent.cli "Which zip codes wait longest for abandoned car removal?"
 python -m pothole_agent.streetgraph build         # refresh the street graph from OpenStreetMap
 ```
@@ -218,10 +218,12 @@ short version is `gcloud builds submit --config cloudbuild.yaml .`
 pytest -q
 ```
 
-## Team
+## Origins
 
-**David Pugliese** — solo build at the Code &amp; Coffee Philadelphia AI Agent
-Hackathon, September 20, 2026 (with Claude Code as the pair programmer).
+potholejawn started as a one-day build at a Philadelphia hackathon in
+September 2026 (the pitch and demo script from that day are in
+`docs/hackathon/`). It has since grown into the pothole-aware router and
+navigation app described above.
 
 ## Data sources
 

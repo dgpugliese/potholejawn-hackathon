@@ -181,7 +181,7 @@
         <p id="status" class="status" role="status" aria-live="polite"></p>
 
         <section id="live" hidden aria-live="polite">
-          <h2 class="live-title">What the agent is doing</h2>
+          <h2 class="live-title">Planning your route</h2>
           <ol id="live-steps"></ol>
         </section>
 
@@ -205,7 +205,7 @@
           </details>
 
           <details id="activity">
-            <summary>What the agent did</summary>
+            <summary>How this route was chosen</summary>
             <ol id="steps"></ol>
           </details>
 
@@ -223,8 +223,8 @@
       </section>
 
       <section id="mode-ask" class="mode-panel" role="tabpanel" aria-labelledby="tab-ask" hidden>
-        <p class="ask-explainer">An AI analyst that writes SQL against 5.9M live Philadelphia
-          311 records &mdash; ask it anything about the city's service requests.</p>
+        <p class="ask-explainer">Ask anything about Philadelphia's 311 service requests.
+          Answers come straight from the city's live data, with the queries shown.</p>
         <div class="ask-chips" role="group" aria-label="Example questions">
           <button type="button" class="ask-chip">Which zips wait longest for pothole repairs?</button>
           <button type="button" class="ask-chip">Illegal dumping vs potholes: which gets fixed faster?</button>
@@ -234,11 +234,11 @@
           <label for="question">A question about Philly 311 data</label>
           <input id="question" name="question" type="text" maxlength="500" required
                  placeholder="How long do potholes in 19143 take to get fixed?">
-          <button id="ask-go" type="submit">Ask the analyst</button>
+          <button id="ask-go" type="submit">Ask</button>
         </form>
         <p id="ask-status" class="status" role="status" aria-live="polite"></p>
         <section id="ask-live" hidden aria-live="polite">
-          <h2 class="live-title">What the analyst is doing</h2>
+          <h2 class="live-title">Checking the city's data</h2>
           <ol id="ask-live-steps"></ol>
         </section>
         <div id="answer" class="briefing" hidden></div>
@@ -247,9 +247,9 @@
       <footer>
         <p>Data: OpenDataPhilly. Routing: OSRM plus our own pothole-aware router on
           OpenStreetMap streets. Map: Esri, OpenStreetMap contributors.</p>
-        <p class="footer-credit">Built at Code &amp; Coffee Philadelphia AI Agent Hackathon 2026 &middot;
-          <a href="https://github.com/dgpugliese/potholejawn-hackathon" rel="noopener">Source on GitHub</a> &middot;
-          <a href="https://dgpugliese.dev/potholejawn" rel="noopener">Case study</a></p>
+        <p class="footer-credit">Made in Philadelphia &middot;
+          <a href="https://github.com/dgpugliese/potholejawn-hackathon" rel="noopener">Open source</a> &middot;
+          <a href="https://dgpugliese.dev/potholejawn" rel="noopener">About</a></p>
       </footer>
     </div>
   </aside>

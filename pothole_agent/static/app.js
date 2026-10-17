@@ -959,6 +959,7 @@
   function describeStep(event) {
     switch (event.type) {
       case "thought": return event.text;
+      case "question": return null;
       case "tool_call":
         if (event.input && typeof event.input.query === "string") {
           return "Ran SQL (" + event.tool + "): " + event.input.query;
@@ -966,9 +967,9 @@
         return describeToolCall(event.tool, event.input || {});
       case "tool_error": return "Error from " + event.tool + ": " + event.preview;
       case "usage": return null;
-      case "agent_unavailable": return "Agent unavailable (" + event.detail + "). Used the built-in planner instead.";
+      case "agent_unavailable": return "Planned with the built-in route picker.";
       case "fallback": return event.text;
-      case "final": return "Finished in " + event.steps + " model turns.";
+      case "final": return null;
       default: return null;
     }
   }
@@ -987,13 +988,10 @@
   function drawSteps() {
     const list = document.getElementById("steps");
     list.replaceChildren();
-    let tokens = 0;
     trip.steps.forEach(function (event) {
-      if (event.type === "usage") tokens += event.input_tokens + event.output_tokens;
       const text = describeStep(event);
       if (text) list.append(el("li", event.type === "tool_error" ? "error" : "", text));
     });
-    if (tokens) list.append(el("li", "", "Total tokens used: " + tokens.toLocaleString()));
     document.getElementById("activity").hidden = trip.steps.length === 0;
   }
 
@@ -1011,7 +1009,7 @@
     trip = data;
     const briefing = document.getElementById("briefing");
     briefing.replaceChildren(document.createTextNode(data.briefing));
-    briefing.append(el("span", "mode", data.mode === "agent" ? "Written by the AI agent from the data below." : "Built-in planner (AI agent not used)."));
+    briefing.append(el("span", "mode", "Based on open 311 reports from the last 12 months."));
     drawComparison();
     drawSteps();
     // Fresh trip: mobile starts the report list collapsed, desktop open (its
@@ -1033,7 +1031,7 @@
     event.preventDefault();
     button.disabled = true;
     if (mobileMq.matches && panelOpen) {
-      // Drop the sheet to half so the map and the live agent steps share the
+      // Drop the sheet to half so the map and the live planning steps share the
       // screen, and dismiss the keyboard so it doesn't cover either. The form
       // folds to its summary row so the ticker starts near the top.
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -1090,7 +1088,7 @@
     };
   });
 
-  // Follow-up question box wired to the 311 analyst agent.
+  // Follow-up question box: open questions answered from the city's 311 data.
   const askForm = document.getElementById("ask-form");
   const askButton = document.getElementById("ask-go");
   const askStatusEl = document.getElementById("ask-status");
@@ -1117,7 +1115,7 @@
     const question = askForm.question.value.trim();
     if (!question) { setAskStatus("Type a question first.", true); return; }
     askButton.disabled = true;
-    setAskStatus("The analyst is querying the city's 311 data.");
+    setAskStatus("Checking the city's 311 data.");
     answerEl.hidden = true;
     const askLive = document.getElementById("ask-live");
     const askSteps = document.getElementById("ask-live-steps");
@@ -1150,7 +1148,7 @@
     });
     source.onerror = function () { // connection-level failure (e.g. bad input, server down)
       finish();
-      setAskStatus("Could not reach the analyst. Try again.", true);
+      setAskStatus("Could not get an answer right now. Try again.", true);
     };
   });
 

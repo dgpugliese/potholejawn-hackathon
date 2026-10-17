@@ -19,7 +19,7 @@ from .tools import CARTO_URL, TIMEOUT_SECONDS
 CENSUS_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
-USER_AGENT = "philly-pothole-agent/0.1 (hackathon project)"
+USER_AGENT = "potholejawn/1.0 (+https://potholejawn.com)"
 
 # Rough bounding box around Philadelphia: (min_lat, max_lat, min_lon, max_lon)
 PHILLY_BOUNDS = (39.85, 40.15, -75.30, -74.94)
