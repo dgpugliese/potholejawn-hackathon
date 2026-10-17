@@ -77,6 +77,17 @@
           <label for="end">Going to</label>
           <input id="end" name="end" type="text" maxlength="200" required
                  placeholder="Citizens Bank Park" value="Citizens Bank Park">
+          <fieldset class="avoid-switch">
+            <legend>Pothole avoidance</legend>
+            <label class="avoid-option">
+              <input type="radio" name="avoid" value="balanced" checked>
+              <span>Balanced</span>
+            </label>
+            <label class="avoid-option">
+              <input type="radio" name="avoid" value="strong">
+              <span>Max avoidance</span>
+            </label>
+          </fieldset>
           <button id="go" type="submit">Find routes</button>
         </form>
 
@@ -89,7 +100,20 @@
 
         <section id="results" hidden>
           <div id="routes" class="routes"></div>
+          <p id="comparison" class="comparison" hidden></p>
           <div id="briefing" class="briefing"></div>
+
+          <div class="actions">
+            <a id="open-maps" class="action-link" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+            <button id="share" class="action-link" type="button">Copy share link</button>
+            <a class="action-link" href="https://www.phila.gov/departments/philly311/" target="_blank"
+               rel="noopener noreferrer">Report a pothole to 311</a>
+          </div>
+
+          <details id="directions">
+            <summary id="directions-summary">Turn-by-turn directions</summary>
+            <ol id="directions-list" class="directions"></ol>
+          </details>
 
           <details id="activity">
             <summary>What the agent did</summary>
@@ -105,7 +129,8 @@
 
         <p class="fine-print">Markers are open resident reports of street defects from the last
           12 months, from Philadelphia 311. They are not verified and some may be patched
-          already. Plan before you drive, not while driving.</p>
+          already. The smooth route treats every open report as a time penalty on its
+          street; it is a plan, not a guarantee. Plan before you drive, not while driving.</p>
       </section>
 
       <section id="mode-ask" class="mode-panel" role="tabpanel" aria-labelledby="tab-ask" hidden>
@@ -131,7 +156,8 @@
       </section>
 
       <footer>
-        <p>Data: OpenDataPhilly. Routing: OSRM. Map: OpenStreetMap.</p>
+        <p>Data: OpenDataPhilly. Routing: OSRM plus our own pothole-aware router on
+          OpenStreetMap streets. Map: Esri, OpenStreetMap contributors.</p>
         <p class="footer-credit">Built at Code &amp; Coffee Philadelphia AI Agent Hackathon 2026 &middot;
           <a href="https://github.com/dgpugliese/potholejawn-hackathon" rel="noopener">Source on GitHub</a> &middot;
           <a href="https://dgpugliese.dev/potholejawn" rel="noopener">Case study</a></p>

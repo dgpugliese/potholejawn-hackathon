@@ -85,6 +85,15 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024  # requests are two short strings
     limiter = _RateLimiter()
+    if os.environ.get("PRELOAD_GRAPH") == "1":
+        # Load the street graph at start (about a quarter second) so the first
+        # trip of a fresh container does not pay for it. A missing graph file is
+        # logged, not fatal: the fast routes still work without it.
+        status = graph_status()
+        if status["available"]:
+            app.logger.info("smooth router ready: %s segments", status["segments"])
+        else:
+            app.logger.warning("smooth router unavailable: %s", status["error"])
 
     def client_ip() -> str:
         # Behind the Cloudflare tunnel the real client is in CF-Connecting-IP.

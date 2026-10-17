@@ -828,6 +828,85 @@
     });
   }
 
+  function kindLabel(route) {
+    if (route.kind === "smooth") return "Smoothest";
+    const fastest = trip.routes.filter((r) => r.kind === "fast").sort((a, b) => a.minutes - b.minutes)[0];
+    return fastest && fastest.route_id === route.route_id ? "Fastest" : "Alternative";
+  }
+
+  function drawComparison() {
+    const box = document.getElementById("comparison");
+    const c = trip.comparison;
+    if (!c || c.reports_avoided <= 0) { box.hidden = true; box.textContent = ""; return; }
+    const n = c.reports_avoided;
+    let cost;
+    if (c.extra_minutes > 0) cost = "for about " + c.extra_minutes + " extra minute" + (c.extra_minutes === 1 ? "" : "s");
+    else if (c.extra_minutes < 0) cost = "and is " + (-c.extra_minutes) + " minute" + (c.extra_minutes === -1 ? "" : "s") + " faster";
+    else cost = "for no extra time";
+    box.replaceChildren(
+      el("b", "", "Avoids " + n + " reported pothole" + (n === 1 ? "" : "s")),
+      document.createTextNode(" " + cost + " versus the fastest route (" + c.against + ")" +
+        (c.extra_miles > 0 ? ", " + c.extra_miles + " mi longer." : "."))
+    );
+    box.hidden = false;
+  }
+
+  function drawDirections() {
+    const active = trip.routes.find((r) => r.route_id === activeId);
+    const details = document.getElementById("directions");
+    const list = document.getElementById("directions-list");
+    list.replaceChildren();
+    const steps = active.steps || [];
+    if (!steps.length) { details.hidden = true; return; }
+    details.hidden = false;
+    document.getElementById("directions-summary").textContent =
+      "Turn-by-turn for route " + active.route_id + " (" + steps.length + " steps)";
+    steps.forEach(function (step) {
+      const item = el("li");
+      item.append(el("span", "dir-text", step.text));
+      if (step.miles >= 0.05) item.append(el("span", "dir-dist", step.miles + " mi"));
+      list.append(item);
+    });
+  }
+
+  function mapsUrl(route) {
+    // Google Maps URL API: origin/destination plus up to 8 via points so the
+    // real nav app drives the same smooth route. Coordinates only, no text.
+    if (!trip.start || !trip.end) return "";
+    const fmt = (p) => p.lat.toFixed(5) + "," + p.lon.toFixed(5);
+    let url = "https://www.google.com/maps/dir/?api=1&travelmode=driving" +
+      "&origin=" + fmt(trip.start) + "&destination=" + fmt(trip.end);
+    const via = (route.via || []).slice(0, 8).map(fmt);
+    if (via.length) url += "&waypoints=" + encodeURIComponent(via.join("|"));
+    return url;
+  }
+
+  function drawActions() {
+    const active = trip.routes.find((r) => r.route_id === activeId);
+    const link = document.getElementById("open-maps");
+    link.href = mapsUrl(active);
+    link.textContent = active.kind === "smooth" ? "Drive this in Google Maps" : "Open in Google Maps";
+  }
+
+  // Shareable URLs: /?from=...&to=...&avoid=strong re-runs the same trip.
+  function updateUrl(start, end, avoid) {
+    const params = new URLSearchParams();
+    params.set("from", start);
+    params.set("to", end);
+    if (avoid && avoid !== "balanced") params.set("avoid", avoid);
+    history.replaceState(null, "", "?" + params.toString());
+  }
+
+  document.getElementById("share").addEventListener("click", function () {
+    const url = location.href;
+    const done = function () { setStatus("Link copied. Anyone can open it to see this trip."); setTimeout(function () { setStatus(""); }, 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { setStatus(url); });
+    } else {
+      setStatus(url);
+    }
+  });
+
   function drawRouteSigns() {
     const box = document.getElementById("routes");
     box.replaceChildren();
@@ -839,10 +918,13 @@
       sign.setAttribute("aria-pressed", String(route.route_id === activeId));
 
       const meta = el("span", "route-meta");
-      meta.append(el("strong", "", route.route_id === trip.recommended ? "Recommended" : "Alternative"), document.createTextNode(route.miles + " mi, about " + route.minutes + " min"));
+      const title = el("strong", "", kindLabel(route));
+      if (route.route_id === trip.recommended) title.append(el("span", "route-badge", "Recommended"));
+      meta.append(title, document.createTextNode(route.miles + " mi, about " + route.minutes + " min"));
       const count = el("span", "route-count");
       count.append(el("b", "", String(route.potholes.length)), document.createTextNode("reported"));
       sign.append(el("span", "route-letter", route.route_id), meta, count);
+      if (route.kind === "smooth") sign.classList.add("smooth");
       sign.addEventListener("click", () => selectRoute(route.route_id));
       box.append(sign);
     });
@@ -881,13 +963,24 @@
         if (event.input && typeof event.input.query === "string") {
           return "Ran SQL (" + event.tool + "): " + event.input.query;
         }
-        return "Called " + event.tool + " " + JSON.stringify(event.input);
+        return describeToolCall(event.tool, event.input || {});
       case "tool_error": return "Error from " + event.tool + ": " + event.preview;
       case "usage": return null;
       case "agent_unavailable": return "Agent unavailable (" + event.detail + "). Used the built-in planner instead.";
       case "fallback": return event.text;
       case "final": return "Finished in " + event.steps + " model turns.";
       default: return null;
+    }
+  }
+
+  function describeToolCall(tool, input) {
+    switch (tool) {
+      case "geocode_address": return "Looked up \u201c" + input.address + "\u201d as the " + (input.role || "place");
+      case "find_routes": return "Fetched the fastest driving routes and alternatives";
+      case "find_smooth_route": return "Planned a smooth route with every open pothole report as a street penalty";
+      case "scan_route": return "Scanned route " + input.route_id + " against the city\u2019s 311 data";
+      case "recommend_route": return "Recommended route " + input.route_id + (input.reason ? ": " + input.reason : "");
+      default: return "Called " + tool + " " + JSON.stringify(input);
     }
   }
 
@@ -909,6 +1002,8 @@
     drawMap();
     drawRouteSigns();
     drawPotholeList();
+    drawDirections();
+    drawActions();
     updatePeekSummary();
   }
 
@@ -917,6 +1012,7 @@
     const briefing = document.getElementById("briefing");
     briefing.replaceChildren(document.createTextNode(data.briefing));
     briefing.append(el("span", "mode", data.mode === "agent" ? "Written by the AI agent from the data below." : "Built-in planner (AI agent not used)."));
+    drawComparison();
     drawSteps();
     // Fresh trip: mobile starts the report list collapsed, desktop open (its
     // summary toggle is hidden). Set once here, not on every route tap.
@@ -952,9 +1048,11 @@
     liveList.replaceChildren();
     live.hidden = false;
 
+    const avoid = form.avoid.value === "strong" ? "strong" : "balanced";
+    updateUrl(form.start.value, form.end.value, avoid);
     const source = new EventSource(
       "/api/trip/stream?start=" + encodeURIComponent(form.start.value) +
-      "&end=" + encodeURIComponent(form.end.value)
+      "&end=" + encodeURIComponent(form.end.value) + "&avoid=" + avoid
     );
     function finish() {
       source.close();
@@ -1055,4 +1153,18 @@
       setAskStatus("Could not reach the analyst. Try again.", true);
     };
   });
+
+  // A shared link (?from=&to=&avoid=) plans the trip as soon as the page loads.
+  (function runFromUrl() {
+    const params = new URLSearchParams(location.search);
+    const from = (params.get("from") || "").trim();
+    const to = (params.get("to") || "").trim();
+    if (!from || !to) return;
+    form.start.value = from.slice(0, 200);
+    form.end.value = to.slice(0, 200);
+    form.avoid.value = params.get("avoid") === "strong" ? "strong" : "balanced";
+    openPanel();
+    if (form.requestSubmit) form.requestSubmit();
+    else form.dispatchEvent(new Event("submit", { cancelable: true }));
+  })();
 })();

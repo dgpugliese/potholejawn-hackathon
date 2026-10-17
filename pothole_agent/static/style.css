@@ -446,11 +446,98 @@ input:focus-visible, button:focus-visible, summary:focus-visible, .route-sign:fo
 .route-sign.active { opacity: 1; box-shadow: inset 0 0 0 3px var(--sign-blue), inset 0 0 0 5px #fff, var(--shadow-raised); }
 .route-sign.recommended.active { box-shadow: inset 0 0 0 3px var(--sign-green), inset 0 0 0 5px #fff, var(--shadow-raised); }
 
+.route-sign.smooth .route-letter { color: var(--warning); }
+
 .route-letter { font-size: 2rem; font-weight: 800; line-height: 1; }
 .route-meta { font-size: 0.85rem; opacity: 0.92; }
 .route-meta strong { display: block; font-size: 1.05rem; letter-spacing: 0.01em; }
+.route-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  vertical-align: 0.15em;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--warning);
+  border-radius: 999px;
+}
 .route-count { text-align: center; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1.2; opacity: 0.92; }
 .route-count b { display: block; font-size: 1.7rem; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--warning); }
+
+/* ---- Pothole-avoidance switch: a small segmented control inside the form --- */
+.avoid-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: var(--space-2) 0 var(--space-1);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.avoid-switch legend {
+  padding: 0;
+  margin: 0 0 var(--space-1);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--asphalt-soft);
+}
+.avoid-option { margin: 0; position: relative; }
+.avoid-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.avoid-option span {
+  display: block;
+  padding: 0.5rem 0.4rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--asphalt-soft);
+  border: 1.5px solid var(--asphalt);
+  background: var(--card-bg);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.avoid-option:first-of-type span { border-radius: var(--radius-control) 0 0 var(--radius-control); border-right: 0; }
+.avoid-option:last-of-type span { border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.avoid-option input:checked + span { background: var(--warning); color: var(--ink); box-shadow: inset 0 -2px 0 var(--asphalt); }
+.avoid-option input:focus-visible + span { outline: 3px solid var(--sign-blue); outline-offset: 2px; }
+
+/* ---- Comparison banner: the one-line answer under the route cards --------- */
+.comparison {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--ink);
+  background: rgba(0, 107, 84, 0.08);
+  border-left: 4px solid var(--sign-green);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+}
+.comparison b { color: var(--sign-green); }
+
+/* ---- Action row: hand the route to a real nav app, share, report ---------- */
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.action-link {
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--asphalt);
+  text-decoration: none;
+  padding: 0.4rem 0.7rem;
+  border: 1.5px solid var(--asphalt);
+  border-radius: 999px;
+  background: var(--card-bg);
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+.action-link:hover { background: var(--warning); transform: translateY(-1px); }
+
+/* ---- Turn-by-turn list ------------------------------------------------------ */
+.directions { margin: var(--space-2) var(--space-4) var(--space-3); padding-left: 1.4rem; font-size: 0.88rem; }
+.directions li { display: flex; justify-content: space-between; gap: var(--space-3); padding: 0.3rem 0; border-bottom: 1px dashed var(--hairline); }
+.directions li:last-child { border-bottom: 0; }
+.directions .dir-dist { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 details {
   margin-top: var(--space-5);

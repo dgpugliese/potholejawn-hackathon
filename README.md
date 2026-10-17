@@ -4,9 +4,9 @@
 
 # potholejawn
 
-**An AI agent that scans Philadelphia's live 311 data — 5.9 million rows — to route you around the potholes.**
+**A pothole-aware router for Philadelphia: live 311 data, our own street graph, and an AI agent that explains the pick.**
 
-[![tests](https://img.shields.io/badge/tests-42%20passing-brightgreen)](tests)
+[![tests](https://img.shields.io/badge/tests-62%20passing-brightgreen)](tests)
 [![python](https://img.shields.io/badge/python-3.12-blue)](pyproject.toml)
 [![license](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 [![live](https://img.shields.io/badge/live-potholejawn.com-f5c518)](https://potholejawn.com)
@@ -17,10 +17,13 @@
 
 </div>
 
-Type where you are and where you are going in Philadelphia. An AI agent looks up
-both places, fetches the driving routes, scans each one against the city's live
-311 data for open pothole reports, and recommends the smoother drive, with a map
-of every reported pothole along the way.
+Type where you are and where you are going in Philadelphia. The app fetches the
+fastest driving routes, then **re-plans the drive on its own street graph with
+every open 311 pothole report as a time penalty**, verifies each route against
+the city's live data, and recommends one. An AI agent runs the tools and writes
+the briefing; a plain-Python planner produces the same result when it cannot.
+Every route comes with turn-by-turn directions and a one-tap hand-off to Google
+Maps that carries the smooth route's waypoints.
 
 Built solo by David Pugliese at the **Code & Coffee Philadelphia AI Agent Hackathon, September 20, 2026**.
 
@@ -29,7 +32,8 @@ Built solo by David Pugliese at the **Code & Coffee Philadelphia AI Agent Hackat
 Live at **[potholejawn.com](https://potholejawn.com)** (also [potholejawn.app](https://potholejawn.app)) — installable to a phone home screen as a PWA.
 
 - The map opens on **every open pothole report in Philly right now**, plotted citywide and clickable.
-- Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data: same 17-minute drive, one route passes 9 open pothole reports, the other 13.
+- Type a destination into the **"Where to?" pill** — try `Citizens Bank Park` from `Temple University`. Real result from live data (Oct 2026): the fastest route passes 7 open pothole reports; the smooth route passes 0, in the same 17 minutes.
+- Pick **Balanced** or **Max avoidance** to say how much time a pothole is worth to you, then **Drive this in Google Maps** or copy a share link (`/?from=…&to=…&avoid=strong`).
 - Or barely type: the search **autocompletes real Philly places** (Liberty Bell, Reading Terminal, the Pennovation Center — where this was built), and 📍 routes from your actual location.
 - After a trip, open **"What the agent did"** for the full audit trail, or ask the **311 analyst** an open-ended question ("where is the city slowest at fixing potholes?") right in the panel.
 
@@ -40,12 +44,13 @@ framework). The model chooses which tools to call and in what order; tool
 errors are fed back so it self-corrects; a 12-step limit and a full JSONL audit
 trail per run keep it bounded and inspectable.
 
-**Trip agent** — geocodes both endpoints, pulls the main route plus alternatives
-from OSRM, runs a PostGIS query against the city's live 311 API for open
-"Street Defect" reports within 30 m of each route, weighs pothole count, report
-age, and drive time, and recommends a route with a plain-language briefing.
-Agent steps stream to the panel live over Server-Sent Events, so you watch it
-think instead of staring at a spinner.
+**Trip agent** — geocodes both endpoints, pulls the fastest route plus
+alternatives from OSRM, asks the **smooth router** for a pothole-aware route,
+runs a PostGIS query against the city's live 311 API for open "Street Defect"
+reports within 30 m of every route, weighs pothole count, report age, and drive
+time, and recommends one with a plain-language briefing. Agent steps stream to
+the panel live over Server-Sent Events, so you watch it think instead of
+staring at a spinner.
 
 **311 accountability analyst** — answers open-ended questions by writing and
 running guarded SQL against the full 5.9M-row dataset, reading its own errors
@@ -75,24 +80,48 @@ Residents, journalists, and council staff should be able to find that out by ask
 
 ```
         map-first UI (Leaflet + Flask)              pothole_agent/webapp.py, static/
-        citywide pothole layer · "Where to?" pill · autocomplete
+        citywide pothole layer · "Where to?" pill · autocomplete · avoidance switch
                 |
 "Temple University" -> "Citizens Bank Park"
         |
    trip agent (Claude + tools)                      pothole_agent/trip.py
-        +-- geocode_address   US Census geocoder, OpenStreetMap fallback
-        +-- find_routes       OSRM: main route plus alternatives
-        +-- scan_route        PostGIS query on the city's 311 API: open
-        |                     'Street Defect' reports within 30 m of the route
-        +-- recommend_route   records the choice as structured output
+        +-- geocode_address     US Census geocoder, OpenStreetMap fallback
+        +-- find_routes         OSRM: fastest route plus alternatives (A, B, ...)
+        +-- find_smooth_route   our router (route S), see below
+        +-- scan_route          PostGIS query on the city's 311 API: open
+        |                       'Street Defect' reports within 30 m of the route
+        +-- recommend_route     records the choice as structured output
         |
    agent steps stream back live (SSE) -> slide-in panel / bottom sheet
-        route signs · briefing · "What the agent did" audit · ask-the-analyst box
+        route signs · comparison · briefing · directions · Google Maps hand-off
 ```
 
-The agent decides which tools to call and in what order, weighs pothole count,
-report age, and drive time, then explains its pick. Every step it took is shown
-in the UI under "What the agent did", including token usage.
+### The smooth router (`pothole_agent/streetgraph.py`, `smooth.py`)
+
+Time-optimal routers like OSRM cannot avoid potholes; the best they can do is
+offer alternatives. So potholejawn routes on its own copy of the city's streets:
+
+1. **Street graph.** The drivable network for Philadelphia comes from
+   OpenStreetMap (Overpass) and is compacted to a 3 MB gzipped JSON file in
+   `data/` (64k intersections, 93k segments, one-way streets and posted speeds
+   kept). It loads in a quarter of a second and ships inside the container.
+2. **Penalties from live data.** Every open Street Defect report from the last
+   12 months (about 1,500) is matched to the street segments within 30 m of it
+   and becomes a time penalty: 45 s per report on *Balanced*, 180 s on *Max
+   avoidance*, weighted down as reports age (a year-old ticket may already be
+   patched). The set refreshes every 10 minutes.
+3. **Search.** A* over travel time plus penalties, with turn-aware junction
+   costs calibrated against OSRM on real Philly trips (within about 10%).
+4. **Make it legal.** The graph path is snapped through OSRM via a handful of
+   waypoints with bearings, which yields a route that respects turn
+   restrictions, with real durations and turn-by-turn directions. If OSRM
+   wanders or is down, the graph geometry is used as is.
+5. **Verify.** The smooth route is scanned with the exact same 311 corridor
+   query as every other route, so its count is the city's number, not ours.
+
+The deterministic pick (used when the agent is unavailable, and suggested to
+it) scores each route as minutes plus the same time value per report the router
+optimised with, so the recommendation agrees with the plan.
 
 The analyst agent (`pothole_agent/agent.py`, `tools.py`) uses `get_schema`,
 `list_categories`, and `run_sql`. When a query fails, the error goes back to the
@@ -124,7 +153,8 @@ streams this agent's steps live and shows every SQL query it runs.
   count is written to `runs/run-<timestamp>.jsonl`.
 - **Honest analysis rules**: the agent reports the open-case share next to any
   time-to-close figure, and does not confuse "more reports" with "more potholes".
-- **Tests** run with a fake model client, so no API key or network is needed.
+- **Tests** run with a fake model client and a synthetic street grid, so no API
+  key or network is needed.
 
 ## Setup
 
@@ -140,7 +170,14 @@ cp .env.example .env          # then add your ANTHROPIC_API_KEY
 python -m pothole_agent.webapp                    # map UI at http://127.0.0.1:5000
 python -m pothole_agent.cli                       # analyst agent, default question
 python -m pothole_agent.cli "Which zip codes wait longest for abandoned car removal?"
+python -m pothole_agent.streetgraph build         # refresh the street graph from OpenStreetMap
 ```
+
+## Deploy
+
+Runs entirely on Google Cloud: Cloud Run, Artifact Registry, Cloud Build,
+Secret Manager, Cloud Logging. See [docs/deploy.md](docs/deploy.md); the
+short version is `gcloud builds submit --config cloudbuild.yaml .`
 
 ## Test
 
@@ -157,8 +194,9 @@ Hackathon, September 20, 2026 (with Claude Code as the pair programmer).
 
 [OpenDataPhilly 311 Service and Information Requests](https://opendataphilly.org/datasets/311-service-and-information-requests/),
 queried live through the city's public Carto SQL API. No API key is required for the data.
-Geocoding: US Census Geocoder and OpenStreetMap Nominatim. Routing: the public OSRM
-demo server (fine for a demo; self-host OSRM for real traffic). Map tiles: Esri World Street Map.
+Street network: OpenStreetMap contributors (ODbL), via Overpass. Geocoding: US Census
+Geocoder and OpenStreetMap Nominatim. Fast routes and snapping: the public OSRM demo
+server. Map tiles: Esri World Street Map.
 
 ## Tools used
 

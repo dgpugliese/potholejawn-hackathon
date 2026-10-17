@@ -1,21 +1,29 @@
 # Project context for Claude Code
 
-Hackathon project. **Hard deadline: stop building 5:30 PM EDT, Sept 20, 2026.**
-Submission is on Devpost (Open Track, plus The Code Registry code-quality track).
+Started as a one-day hackathon build (Sept 20, 2026); now being turned into a real
+product. Live at potholejawn.com on Google Cloud (Cloud Run). All infrastructure
+stays on Google Cloud.
 
 ## What this is
-"Pothole Pilot": a Waze-style map. User enters start and destination in Philly; an
-agent geocodes, fetches route alternatives, scans each for open pothole reports
-(311 'Street Defect'), and recommends one. See README.md.
-- `agent.py`   generic tool loop (`run_agent`) plus the 311 analyst (`investigate`)
-- `trip.py`    trip agent, its tools (TripContext), and the no-LLM fallback planner
-- `routing.py` geocoders, OSRM, PostGIS pothole query (SQL built from numbers only)
-- `webapp.py`  Flask API plus static Leaflet UI in `static/`
-- `guardrails.py` validator for model-written SQL (analyst agent only)
+potholejawn: a Waze-style map that routes around potholes. User enters start and
+destination in Philly; the app fetches OSRM's fastest routes, plans its own
+pothole-aware route on a street graph with live 311 reports as penalties, verifies
+every route against the city's data, and recommends one. See README.md.
+- `agent.py`       generic tool loop (`run_agent`) plus the 311 analyst (`investigate`)
+- `trip.py`        trip agent, its tools (TripContext), and the no-LLM fallback planner
+- `routing.py`     geocoders, OSRM (routes, via-snap, directions), PostGIS queries
+                   (SQL built from numbers only)
+- `streetgraph.py` street graph builder (Overpass -> data/philly_graph.json.gz) and
+                   the penalised A* router
+- `smooth.py`      graph singleton, citywide report cache, snap-and-verify, scoring
+- `webapp.py`      Flask API plus static Leaflet UI in `static/`
+- `guardrails.py`  validator for model-written SQL (analyst agent only)
 
-## Judging criteria to optimise for
-Technical execution, agentic design, innovation, impact, reliability and safety,
-demo and completeness. The Code Registry scores security, dependencies, quality.
+## Deployment
+Google Cloud project potholejawn-prod, Cloud Run service `potholejawn` (us-east4).
+`cloudbuild.yaml` tests, builds, pushes, deploys; the Anthropic key lives in Secret
+Manager. See docs/deploy.md. The street graph ships in the image; rebuild it with
+`python -m pothole_agent.streetgraph build` every few months.
 
 ## Rules
 - Never commit secrets. `.env` is gitignored; keep it that way.
@@ -23,7 +31,8 @@ demo and completeness. The Code Registry scores security, dependencies, quality.
 - Every new behaviour gets a test. Run `pytest -q` before each commit.
 - All model-written SQL must go through `validate_sql`. Never bypass it.
 - Small commits with clear messages.
-- Prefer finishing and polishing over adding features after 4:00 PM.
+- The smooth route must always be scanned by the same Carto corridor query as the
+  OSRM routes; never report our own matching count as the pothole count.
 
 ## Data facts (verified live today)
 - Endpoint: https://phl.carto.com/api/v2/sql?q=<SQL>, no key, PostgreSQL dialect.
@@ -35,19 +44,18 @@ demo and completeness. The Code Registry scores security, dependencies, quality.
   landmarks. Neither alone is enough. CARTO basemap tiles now need a key; use OSM tiles.
 - Verified demo trip: Temple University -> Citizens Bank Park (route A 9 reports, B 13).
 
-## Status
-Verified working without an API key (fallback planner, map, 27 tests). The agent
-path is unit-tested with a fake client but has NOT yet been run against the real
-Anthropic API. That is step 1.
+## Status (Oct 17, 2026)
+Smooth router, directions, avoidance switch, share links, Google Maps hand-off,
+and the Cloud Build pipeline are built and tested (62 tests, fallback path verified
+live). The agent path with `find_smooth_route` is unit-tested with a fake client;
+run it once against the real API after setting ANTHROPIC_API_KEY in .env.
 
-## Suggested next steps, in order
-1. Put ANTHROPIC_API_KEY in .env, run `python -m pothole_agent.webapp`, plan a trip,
-   and confirm the briefing says "Written by the AI agent". Fix whatever breaks.
-2. Tune TRIP_SYSTEM_PROMPT in trip.py so briefings are short, specific, and honest.
-3. Stream agent steps to the UI live (Server-Sent Events) instead of after the fact.
-   Waiting 20 seconds on a static message is the weakest part of the demo.
-4. Ideas if time allows: a follow-up question box wired to the analyst agent
-   ("how long do potholes in this zip take to get fixed?"); a "report a pothole"
-   link to Philly311; severity weighting by report age.
-5. Record a demo under 3 minutes: type two landmarks, show the two routes and the
-   pothole counts, open "What the agent did", mention the fallback and guardrails.
+## Next steps, in order
+1. Create the `anthropic-api-key` secret and IAM bindings (docs/deploy.md), rotate
+   the key, deploy with `gcloud builds submit --config cloudbuild.yaml .`.
+2. Run one real agent trip and tune TRIP_SYSTEM_PROMPT so the briefing compares the
+   smooth route with the fastest one in plain numbers.
+3. Uptime check and an alert on 5xx in Cloud Monitoring; a Cloud Scheduler job that
+   rebuilds the street graph monthly is optional.
+4. Product ideas: self-hosted OSRM on Cloud Run for traffic-aware times; severity
+   from report text; a "was this patched?" feedback loop; other cities' 311 feeds.
