@@ -16,6 +16,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from .agent import investigate
 from .routing import MAX_ADDRESS_CHARS, RoutingError, potholes_in_bbox
+from .smooth import graph_status, normalize_avoidance
 from .trip import plan_trip
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -95,7 +96,13 @@ def create_app() -> Flask:
 
     @app.get("/healthz")
     def health():
-        return jsonify({"ok": True, "agent_available": bool(os.environ.get("ANTHROPIC_API_KEY"))})
+        return jsonify(
+            {
+                "ok": True,
+                "agent_available": bool(os.environ.get("ANTHROPIC_API_KEY")),
+                "smooth_router": graph_status(),
+            }
+        )
 
     def validate_addresses(start, end) -> str | None:
         """Return an error message for the browser, or None if the input is fine."""
@@ -117,18 +124,21 @@ def create_app() -> Flask:
     trip_cache_lock = threading.Lock()
     trip_cache_seconds = int(os.environ.get("TRIP_CACHE_SECONDS", "3600"))
 
-    def cached_trip(start: str, end: str) -> dict | None:
-        key = (start.strip().lower(), end.strip().lower())
+    def trip_key(start: str, end: str, avoidance: str) -> tuple[str, str, str]:
+        return (start.strip().lower(), end.strip().lower(), avoidance)
+
+    def cached_trip(start: str, end: str, avoidance: str) -> dict | None:
+        key = trip_key(start, end, avoidance)
         with trip_cache_lock:
             hit = trip_cache.get(key)
             if hit and time.monotonic() - hit[0] < trip_cache_seconds:
                 return hit[1]
         return None
 
-    def store_trip(start: str, end: str, result: dict) -> None:
+    def store_trip(start: str, end: str, avoidance: str, result: dict) -> None:
         if result.get("mode") != "agent":  # fallback runs are cheap to redo
             return
-        key = (start.strip().lower(), end.strip().lower())
+        key = trip_key(start, end, avoidance)
         with trip_cache_lock:
             if len(trip_cache) > 128:
                 trip_cache.clear()
@@ -170,15 +180,16 @@ def create_app() -> Flask:
         if problem:
             return jsonify({"error": problem}), 400
         use_agent = bool(body.get("use_agent", True)) and bool(os.environ.get("ANTHROPIC_API_KEY"))
-        hit = cached_trip(start, end)
+        avoidance = normalize_avoidance(body.get("avoid"))
+        hit = cached_trip(start, end, avoidance)
         if hit is not None:  # before the limiter: cache hits are free
             return jsonify({**hit, "cached": True})
         ip = client_ip()
         if not limiter.try_acquire(ip):
             return jsonify({"error": RATE_LIMIT_MESSAGE}), 429
         try:
-            result = plan_trip(start, end, use_agent=use_agent)
-            store_trip(start, end, result)
+            result = plan_trip(start, end, use_agent=use_agent, avoidance=avoidance)
+            store_trip(start, end, avoidance, result)
             return jsonify(result)
         except RoutingError as error:
             return jsonify({"error": str(error)}), 400
@@ -204,7 +215,8 @@ def create_app() -> Flask:
         use_agent = bool(request.args.get("use_agent", "1") != "0") and bool(
             os.environ.get("ANTHROPIC_API_KEY")
         )
-        hit = cached_trip(start, end)
+        avoidance = normalize_avoidance(request.args.get("avoid"))
+        hit = cached_trip(start, end, avoidance)
         if hit is not None:  # before the limiter: cache hits are free
 
             def generate_cached():
@@ -225,9 +237,13 @@ def create_app() -> Flask:
         def worker() -> None:
             try:
                 result = plan_trip(
-                    start, end, use_agent=use_agent, on_step=lambda e: events.put(("step", e))
+                    start,
+                    end,
+                    use_agent=use_agent,
+                    on_step=lambda e: events.put(("step", e)),
+                    avoidance=avoidance,
                 )
-                store_trip(start, end, result)
+                store_trip(start, end, avoidance, result)
                 events.put(("result", result))
             except RoutingError as error:
                 events.put(("trip_error", {"error": str(error)}))

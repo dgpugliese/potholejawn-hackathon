@@ -27,6 +27,7 @@ MAX_ADDRESS_CHARS = 200
 MAX_ROUTE_POINTS = 1500
 MIN_BUFFER_M, MAX_BUFFER_M, DEFAULT_BUFFER_M = 10, 100, 30
 LOOKBACK_DAYS = 365
+CITYWIDE_LIMIT = 5000  # safety cap on the citywide open-report query (~1,500 today)
 METERS_PER_MILE = 1609.344
 
 
@@ -41,10 +42,19 @@ class Route:
     minutes: float
     coordinates: list[list[float]]  # [lon, lat] pairs, GeoJSON order
     potholes: list[dict[str, Any]] | None = field(default=None)
+    kind: str = "fast"  # "fast": a time-optimal OSRM route; "smooth": pothole-aware
+    steps: list[dict[str, Any]] = field(default_factory=list)  # turn-by-turn directions
+    source: str = "osrm"  # "osrm" or "graph" (own router, when OSRM could not snap)
+    via: list[dict[str, float]] = field(default_factory=list)  # waypoints that define it
 
     def summary(self) -> dict[str, Any]:
         """Small description that is safe to hand to the model (no geometry)."""
-        return {"route_id": self.route_id, "miles": self.miles, "minutes": self.minutes}
+        return {
+            "route_id": self.route_id,
+            "kind": self.kind,
+            "miles": self.miles,
+            "minutes": self.minutes,
+        }
 
 
 def in_philadelphia(lat: float, lon: float) -> bool:
@@ -134,29 +144,151 @@ def _check_point(lat: float, lon: float) -> tuple[float, float]:
     return lat, lon
 
 
+_MANEUVER_TEXT = {
+    "depart": "Head {dir}on {name}",
+    "arrive": "Arrive at your destination",
+    "turn": "Turn {mod} onto {name}",
+    "new name": "Continue onto {name}",
+    "continue": "Continue {mod} on {name}",
+    "merge": "Merge {mod} onto {name}",
+    "on ramp": "Take the ramp {mod} onto {name}",
+    "off ramp": "Take the exit {mod} onto {name}",
+    "fork": "Keep {mod} onto {name}",
+    "end of road": "At the end of the road turn {mod} onto {name}",
+    "roundabout": "Enter the roundabout and take the exit onto {name}",
+    "rotary": "Enter the rotary and take the exit onto {name}",
+    "exit roundabout": "Exit the roundabout onto {name}",
+    "exit rotary": "Exit the rotary onto {name}",
+}
+_COMPASS = {
+    "north": "N",
+    "south": "S",
+    "east": "E",
+    "west": "W",
+    "northeast": "NE",
+    "northwest": "NW",
+    "southeast": "SE",
+    "southwest": "SW",
+}
+
+
+def _bearing_to_compass(bearing: float) -> str:
+    names = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]
+    return names[int(((bearing % 360) + 22.5) // 45) % 8]
+
+
+def _describe_step(step: dict[str, Any]) -> dict[str, Any] | None:
+    """Turn one OSRM step into a short instruction. Returns None for no-ops."""
+    maneuver = step.get("maneuver", {})
+    kind = maneuver.get("type", "")
+    modifier = str(maneuver.get("modifier", "")).replace("slight ", "slightly ")
+    name = step.get("name") or ""
+    ref = step.get("ref") or ""
+    if name and ref:
+        name = f"{name} ({ref})"
+    elif ref:
+        name = ref
+    template = _MANEUVER_TEXT.get(kind)
+    if template is None:
+        return None
+    if kind == "depart":
+        direction = _bearing_to_compass(maneuver.get("bearing_after", 0))
+        text = template.format(dir=f"{direction} ", name=name or "the unnamed road")
+    else:
+        text = template.format(mod=modifier or "straight", name=name)
+        if not name:  # ramps and exits are often unnamed: "Take the exit right"
+            text = text.replace(" onto ", "").replace(" on ", "").rstrip()
+    text = text.replace("  ", " ").replace("Continue straight on", "Continue on")
+    return {
+        "text": text,
+        "miles": round(step.get("distance", 0.0) / METERS_PER_MILE, 2),
+        "minutes": round(step.get("duration", 0.0) / 60, 1),
+    }
+
+
+def _route_from_osrm(raw: dict[str, Any], route_id: str, kind: str = "fast") -> Route:
+    steps = []
+    for leg in raw.get("legs", []):
+        for step in leg.get("steps", []):
+            described = _describe_step(step)
+            if described is None:
+                continue
+            # Via-point legs produce an "arrive"/"depart" pair mid-route; drop them.
+            if steps and described["text"].startswith(("Arrive", "Head")):
+                continue
+            if steps and described["miles"] == 0 and described["text"] == steps[-1]["text"]:
+                continue
+            steps.append(described)
+    if steps and not steps[-1]["text"].startswith("Arrive"):
+        steps.append({"text": "Arrive at your destination", "miles": 0.0, "minutes": 0.0})
+    return Route(
+        route_id=route_id,
+        kind=kind,
+        miles=round(raw["distance"] / METERS_PER_MILE, 1),
+        minutes=max(1, round(raw["duration"] / 60)),
+        coordinates=raw["geometry"]["coordinates"],
+        steps=steps,
+    )
+
+
+def _osrm(coords: str, params: dict[str, str]) -> dict[str, Any]:
+    response = requests.get(
+        f"{OSRM_URL}/{coords}",
+        params={"overview": "full", "geometries": "geojson", "steps": "true", **params},
+        headers={"User-Agent": USER_AGENT},
+        timeout=TIMEOUT_SECONDS,
+    )
+    return response.json()
+
+
 def fetch_routes(start_lat: float, start_lon: float, end_lat: float, end_lon: float) -> list[Route]:
-    """Ask OSRM for the main driving route plus alternatives."""
+    """Ask OSRM for the main driving route plus alternatives, with directions."""
     start_lat, start_lon = _check_point(start_lat, start_lon)
     end_lat, end_lon = _check_point(end_lat, end_lon)
-    url = f"{OSRM_URL}/{start_lon:.6f},{start_lat:.6f};{end_lon:.6f},{end_lat:.6f}"
-    params = {"overview": "full", "geometries": "geojson", "alternatives": "3"}
-    response = requests.get(
-        url, params=params, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS
-    )
-    payload = response.json()
+    coords = f"{start_lon:.6f},{start_lat:.6f};{end_lon:.6f},{end_lat:.6f}"
+    payload = _osrm(coords, {"alternatives": "3"})
     if payload.get("code") != "Ok" or not payload.get("routes"):
         raise RoutingError("No driving route found between those two places.")
-    routes = []
-    for index, raw in enumerate(payload["routes"]):
-        routes.append(
-            Route(
-                route_id="ABCD"[index] if index < 4 else str(index),
-                miles=round(raw["distance"] / METERS_PER_MILE, 1),
-                minutes=round(raw["duration"] / 60),
-                coordinates=raw["geometry"]["coordinates"],
-            )
-        )
-    return routes
+    return [
+        _route_from_osrm(raw, "ABCD"[index] if index < 4 else str(index))
+        for index, raw in enumerate(payload["routes"])
+    ]
+
+
+MAX_VIA_POINTS = 10
+
+
+def fetch_route_via(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    via: list[dict[str, float]],
+    route_id: str = "S",
+) -> Route | None:
+    """Ask OSRM for a legal, turn-restricted route through our chosen waypoints.
+
+    Each via point carries the bearing of travel on its street, which stops
+    OSRM from snapping to the opposite carriageway and doubling back. Returns
+    None when OSRM cannot route it; the caller then falls back to the graph
+    geometry.
+    """
+    start_lat, start_lon = _check_point(*start)
+    end_lat, end_lon = _check_point(*end)
+    points = [(start_lon, start_lat, None)]
+    for point in via[:MAX_VIA_POINTS]:
+        lat, lon = _check_point(point["lat"], point["lon"])
+        points.append((lon, lat, float(point["bearing"])))
+    points.append((end_lon, end_lat, None))
+    coords = ";".join(f"{lon:.6f},{lat:.6f}" for lon, lat, _ in points)
+    bearings = ";".join("" if b is None else f"{int(round(b)) % 360},25" for _, _, b in points)
+    try:
+        payload = _osrm(coords, {"bearings": bearings, "continue_straight": "true"})
+    except (requests.RequestException, ValueError):
+        return None
+    if payload.get("code") != "Ok" or not payload.get("routes"):
+        return None
+    route = _route_from_osrm(payload["routes"][0], route_id, kind="smooth")
+    route.via = list(via[:MAX_VIA_POINTS])
+    return route
 
 
 def _thin(coordinates: list[list[float]]) -> list[list[float]]:
@@ -202,7 +334,7 @@ def build_bbox_sql(south: float, west: float, north: float, east: float, limit: 
     east = max(min_lon, min(max_lon, float(east)))
     if south > north or west > east:
         raise RoutingError("Bounding box is inverted.")
-    limit = max(1, min(2000, int(limit)))
+    limit = max(1, min(CITYWIDE_LIMIT, int(limit)))
     return (
         "SELECT service_request_id, address, requested_datetime, lat, lon "
         "FROM public_cases_fc "
@@ -215,9 +347,7 @@ def build_bbox_sql(south: float, west: float, north: float, east: float, limit: 
     )
 
 
-def potholes_in_bbox(south: float, west: float, north: float, east: float) -> list[dict[str, Any]]:
-    """All open 'Street Defect' reports inside a map viewport, newest first."""
-    sql = build_bbox_sql(south, west, north, east)
+def _report_rows(sql: str) -> list[dict[str, Any]]:
     response = requests.post(CARTO_URL, data={"q": sql}, timeout=TIMEOUT_SECONDS)
     payload = response.json()
     if response.status_code != 200 or "error" in payload:
@@ -237,6 +367,21 @@ def potholes_in_bbox(south: float, west: float, north: float, east: float) -> li
             }
         )
     return potholes
+
+
+def potholes_in_bbox(south: float, west: float, north: float, east: float) -> list[dict[str, Any]]:
+    """All open 'Street Defect' reports inside a map viewport, newest first."""
+    return _report_rows(build_bbox_sql(south, west, north, east))
+
+
+def open_reports_citywide() -> list[dict[str, Any]]:
+    """Every open 'Street Defect' report in the city from the last 12 months.
+
+    This is what the pothole-aware router penalises. About 1,500 rows today;
+    the limit is a safety cap, not an expected size.
+    """
+    min_lat, max_lat, min_lon, max_lon = PHILLY_BOUNDS
+    return _report_rows(build_bbox_sql(min_lat, min_lon, max_lat, max_lon, limit=CITYWIDE_LIMIT))
 
 
 def potholes_along(route: Route, buffer_m: int = DEFAULT_BUFFER_M) -> list[dict[str, Any]]:

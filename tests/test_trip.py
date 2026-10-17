@@ -42,12 +42,19 @@ def fake_services(monkeypatch):
         "fetch_routes",
         lambda *_: [Route("A", 3.4, 12, LINE), Route("B", 3.9, 13, LINE)],
     )
+    # The smooth router is faked as a slightly slower route with two reports, so
+    # the deterministic pick still lands on B here; test_smooth_route_wins covers
+    # the case where S is the better drive.
+    monkeypatch.setattr(
+        trip,
+        "plan_smooth_route",
+        lambda *_, avoidance="balanced", **__: Route("S", 3.6, 14, LINE, kind="smooth"),
+    )
+    counts = {"A": 5, "B": 1, "S": 2}
     monkeypatch.setattr(
         trip,
         "potholes_along",
-        lambda route, buffer_m=30: [
-            _pothole(i, 100 + i) for i in range(5 if route.route_id == "A" else 1)
-        ],
+        lambda route, buffer_m=30: [_pothole(i, 100 + i) for i in range(counts[route.route_id])],
     )
 
 
@@ -79,8 +86,61 @@ def test_fallback_planner_prefers_fewer_potholes(fake_services):
     result = trip.plan_trip("City Hall", "Stadium", use_agent=False)
     assert result["mode"] == "fallback"
     assert result["recommended"] == "B"
-    assert [len(r["potholes"]) for r in result["routes"]] == [5, 1]
+    assert [len(r["potholes"]) for r in result["routes"]] == [5, 1, 2]
     assert "Route B" in result["briefing"]
+    assert result["comparison"] == {
+        "against": "A",
+        "reports_avoided": 4,
+        "extra_minutes": 1,
+        "extra_miles": 0.5,
+    }
+    assert "avoids 4 reported potholes for about 1 extra minute" in result["briefing"]
+
+
+def test_smooth_route_wins_when_it_is_the_better_drive(fake_services, monkeypatch):
+    monkeypatch.setattr(
+        trip,
+        "plan_smooth_route",
+        lambda *_, avoidance="balanced", **__: Route("S", 3.6, 14, LINE, kind="smooth"),
+    )
+    counts = {"A": 5, "B": 4, "S": 0}
+    monkeypatch.setattr(
+        trip,
+        "potholes_along",
+        lambda route, buffer_m=30: [_pothole(i, 100 + i) for i in range(counts[route.route_id])],
+    )
+    result = trip.plan_trip("City Hall", "Stadium", use_agent=False, avoidance="strong")
+    assert result["recommended"] == "S" and result["avoidance"] == "strong"
+    smooth = next(r for r in result["routes"] if r["route_id"] == "S")
+    assert smooth["kind"] == "smooth" and smooth["potholes"] == []
+    assert result["briefing"].startswith("The smooth route (3.6 mi, about 14 min) has no open")
+    assert "avoids 5 reported potholes for about 2 extra minutes" in result["briefing"]
+
+
+def test_smooth_router_failure_is_reported_not_fatal(fake_services, monkeypatch):
+    from pothole_agent.streetgraph import GraphError
+
+    def broken(*_, **__):
+        raise GraphError("graph file missing")
+
+    monkeypatch.setattr(trip, "plan_smooth_route", broken)
+    result = trip.plan_trip("City Hall", "Stadium", use_agent=False)
+    assert result["recommended"] == "B"
+    assert [r["route_id"] for r in result["routes"]] == ["A", "B"]
+    assert "graph file missing" in result["smooth_error"]
+    assert "pothole-aware router was unavailable" in result["briefing"]
+
+
+def test_agent_can_call_find_smooth_route(fake_services):
+    context = trip.TripContext("strong")
+    context.find_routes(39.9526, -75.1652, 39.9061, -75.1665)
+    reply = context.find_smooth_route(39.9526, -75.1652, 39.9061, -75.1665)
+    assert reply["route_id"] == "S" and reply["kind"] == "smooth"
+    assert reply["avoidance"] == "strong"
+    assert sorted(context.routes) == ["A", "B", "S"]
+    # A later find_routes call (the agent retrying) keeps the smooth route.
+    context.find_routes(39.9526, -75.1652, 39.9061, -75.1665)
+    assert "S" in context.routes
 
 
 def test_agent_failure_degrades_to_fallback(fake_services, tmp_path):
@@ -132,6 +192,8 @@ def test_agent_path_uses_tools_and_records_choice(fake_services, tmp_path):
     assert result["briefing"] == "Take route A."
     route_b = next(r for r in result["routes"] if r["route_id"] == "B")
     assert len(route_b["potholes"]) == 1, "skipped route should be scanned by ensure_complete"
+    route_s = next(r for r in result["routes"] if r["route_id"] == "S")
+    assert len(route_s["potholes"]) == 2, "ensure_complete should plan and scan the smooth route"
 
 
 def test_unknown_route_id_is_an_error(fake_services):
@@ -207,6 +269,19 @@ def test_api_returns_trip(fake_services, monkeypatch):
     assert response.status_code == 200
     assert response.get_json()["recommended"] == "B"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_api_passes_avoidance_through_and_normalises_junk(fake_services, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    client = create_app().test_client()
+    strong = client.post(
+        "/api/trip", json={"start": "City Hall", "end": "Stadium", "avoid": "strong"}
+    )
+    assert strong.get_json()["avoidance"] == "strong"
+    junk = client.post("/api/trip", json={"start": "City Hall", "end": "Stadium", "avoid": "<x>"})
+    assert junk.get_json()["avoidance"] == "balanced"
+    streamed = client.get("/api/trip/stream?start=City%20Hall&end=Stadium&avoid=strong")
+    assert _sse_events(streamed.get_data(as_text=True))[-1][1]["avoidance"] == "strong"
 
 
 def test_build_bbox_sql_clamps_to_philly():
