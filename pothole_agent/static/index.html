@@ -135,16 +135,18 @@
       <header class="masthead">
         <img src="/static/logo.png" alt="" class="logo" width="64" height="64">
         <h1 class="wordmark">pothole<span class="jawn">jawn</span></h1>
-        <button id="settings-open" class="gear-btn" type="button"
-                aria-label="Vehicle, voice and display settings">&#x2699;&#xFE0F;</button>
         <p class="tagline">Dodge the jawns. Pick the Philly route with fewer reported potholes.</p>
       </header>
 
-      <div class="mode-switch" role="tablist" aria-label="Choose a tool">
-        <button type="button" id="tab-trip" class="mode-tab" role="tab"
-                aria-selected="true" aria-controls="mode-trip">Plan a trip</button>
-        <button type="button" id="tab-ask" class="mode-tab" role="tab"
-                aria-selected="false" aria-controls="mode-ask" tabindex="-1">Ask 311 data</button>
+      <div class="toolbar">
+        <div class="mode-switch" role="tablist" aria-label="Choose a tool">
+          <button type="button" id="tab-trip" class="mode-tab" role="tab"
+                  aria-selected="true" aria-controls="mode-trip">Plan a trip</button>
+          <button type="button" id="tab-ask" class="mode-tab" role="tab"
+                  aria-selected="false" aria-controls="mode-ask" tabindex="-1">Ask 311 data</button>
+        </div>
+        <button id="settings-open" class="gear-btn" type="button"
+                aria-label="Vehicle, voice and display settings">&#x2699;&#xFE0F;</button>
       </div>
 
       <section id="mode-trip" class="mode-panel" role="tabpanel" aria-labelledby="tab-trip">
@@ -164,8 +166,8 @@
           <label for="end">Going to</label>
           <input id="end" name="end" type="text" maxlength="200" required
                  placeholder="Citizens Bank Park" value="Citizens Bank Park">
-          <fieldset class="avoid-switch">
-            <legend>Pothole avoidance</legend>
+          <span class="avoid-label" id="avoid-label">Pothole avoidance</span>
+          <fieldset class="avoid-switch" aria-labelledby="avoid-label">
             <label class="avoid-option">
               <input type="radio" name="avoid" value="balanced" checked>
               <span>Balanced</span>
