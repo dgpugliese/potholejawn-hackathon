@@ -1,0 +1,4 @@
+## 2026-10-24 - [Leaflet Popup XSS via bindPopup]
+**Vulnerability:** Leaflet `.bindPopup()` interprets strings as HTML, exposing the application to XSS when passing raw, unescaped user strings directly (e.g. `.bindPopup(place.matched_address)`).
+**Learning:** Leaflet allows mapping elements and user interactions with `.bindPopup()`. Unlike standard DOM `.textContent`, which safely sets text, Leaflet's raw string popup handles raw strings as HTML elements. When using `.bindPopup()` in this project, one must avoid passing raw strings directly.
+**Prevention:** Always use `document.createTextNode(safe_text)` or the custom `el()` helper function from `app.js` to create DOM elements with safe `textContent`, then pass those elements to `.bindPopup()` instead of raw strings.
