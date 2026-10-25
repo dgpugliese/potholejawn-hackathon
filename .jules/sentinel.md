@@ -1,0 +1,4 @@
+## 2026-10-25 - Fix XSS vulnerability in Leaflet popup
+**Vulnerability:** The Leaflet `bindPopup` method in `pothole_agent/static/app.js` was passing raw API output (`place.matched_address`) which is evaluated as HTML.
+**Learning:** Although API data is generally trusted, dynamically rendering it as raw HTML in map popups exposes a persistent Cross-Site Scripting (XSS) vulnerability.
+**Prevention:** Always use safe DOM methods like `document.createTextNode` or the custom `el()` function when displaying untrusted data, instead of relying on string concatenation inside methods that parse HTML (like `bindPopup`).
