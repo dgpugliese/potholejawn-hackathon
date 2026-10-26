@@ -200,6 +200,7 @@ def test_api_returns_trip(fake_services):
     assert response.status_code == 200
     assert response.get_json()["recommended"] == "B"
     assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Content-Security-Policy" in response.headers
 
 
 def test_api_passes_avoidance_through_and_normalises_junk(fake_services):
