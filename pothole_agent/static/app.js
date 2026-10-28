@@ -844,7 +844,8 @@
     });
 
     [trip.start, trip.end].forEach(function (place) {
-      if (place) L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).bindPopup(place.matched_address).addTo(layers);
+      // 🛡️ Sentinel: Fix XSS - use createTextNode so place.matched_address is treated as text
+      if (place) L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).bindPopup(document.createTextNode(place.matched_address)).addTo(layers);
     });
   }
 

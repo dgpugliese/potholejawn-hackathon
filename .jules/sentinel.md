@@ -1,0 +1,4 @@
+## 2025-02-21 - [High] Prevent XSS in Leaflet popups
+**Vulnerability:** The application was passing a raw string `place.matched_address` directly to Leaflet's `.bindPopup()` method. If a user provided a malicious payload in the address field, it could be executed in the context of the user's browser, leading to Cross-Site Scripting (XSS).
+**Learning:** Leaflet popups render HTML by default. When binding user-controlled data to a popup, it must be safely escaped or inserted as text nodes. Using `.bindPopup(raw_string)` is a common vector for XSS if the string contains untrusted data.
+**Prevention:** Always use `document.createTextNode(untrusted_data)` or the `el()` helper function (e.g., `el("div", "", untrusted_data)`) when passing user-controlled content to `.bindPopup()`. Avoid direct raw string injection.
