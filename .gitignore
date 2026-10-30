@@ -6,3 +6,4 @@ venv/
 .pytest_cache/
 runs/*.jsonl
 data/philly_osm_raw.json
+flask.log
