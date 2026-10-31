@@ -1,0 +1,4 @@
+## 2026-10-31 - [XSS vulnerability in Leaflet's bindPopup]
+**Vulnerability:** Found an XSS vulnerability where `place.matched_address` was passed directly as a string to Leaflet's `bindPopup()` function without sanitization. If `matched_address` contains HTML, Leaflet will render it directly, making it susceptible to Cross-Site Scripting (XSS).
+**Learning:** Leaflet's `bindPopup()` interprets strings as HTML. Because user input (such as addresses from API responses) might contain untrusted content, passing strings directly to `bindPopup()` is dangerous.
+**Prevention:** Always use safe DOM element construction when dealing with user-generated or API-provided content in Leaflet popups. Construct a DOM element (e.g., using `document.createElement()` or `el()` helper) and set its content using `document.createTextNode()`, then pass the resulting element to `bindPopup()`.
