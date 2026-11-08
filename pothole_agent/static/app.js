@@ -844,7 +844,12 @@
     });
 
     [trip.start, trip.end].forEach(function (place) {
-      if (place) L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).bindPopup(place.matched_address).addTo(layers);
+      if (place) {
+        const marker = L.marker([place.lat, place.lon], { icon: divIcon("endpoint-marker", 16) }).addTo(layers);
+        const popup = el("div");
+        popup.append(document.createTextNode(place.matched_address));
+        marker.bindPopup(popup);
+      }
     });
   }
 
